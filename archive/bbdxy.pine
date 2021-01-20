@@ -1,0 +1,26 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © ivansoft
+
+//@version=4
+study("Bloomberg Dollar Spot Index", shorttitle="BBDXY", overlay=true)
+
+// 1/FX_IDC:EURUSD*0.3775+1/FX_IDC:JPYUSD*0.1845+1/FX_IDC:CADUSD*0.1148+1/FX_IDC:MXNUSD*0.0987+1/FX_IDC:GBPUSD*0.0946+1/FX_IDC:AUDUSD*0.0610+1/FX_IDC:CHFUSD*0.0437+1/FX_IDC:KRWUSD*0.0343+1/FX_IDC:CNHUSD*0.03+1/FX_IDC:BRLUSD*0.0208
+
+// BBDXY
+// 1/FX_IDC:EURUSD^0.3775*1/FX_IDC:JPYUSD^0.1845*1/FX_IDC:CADUSD^0.1148*1/FX_IDC:MXNUSD^0.0987*1/FX_IDC:GBPUSD^0.0946*1/FX_IDC:AUDUSD^0.0610*1/FX_IDC:CHFUSD^0.0437*1/FX_IDC:KRWUSD^0.0343*1/FX_IDC:CNHUSD^0.03*1/FX_IDC:BRLUSD^0.0208
+
+// DXY
+// 50.14348112*1/FX_IDC:EURUSD^0.576*1/FX_IDC:JPYUSD^0.136*1/FX_IDC:GBPUSD^0.119*1/FX_IDC:CADUSD^0.091*1/FX_IDC:SEKUSD^0.042*1/FX_IDC:CHFUSD^0.036
+
+f_print(_text) =>
+    // Create label on the first bar.
+    var _label = label.new(bar_index, na, _text, xloc.bar_index, yloc.price, color(na), label.style_none, color.gray, size.large, text.align_left)
+    // On next bars, update the label's x and y position, and the text it displays.
+    label.set_xy(_label, bar_index, highest(40)[1])
+    label.set_text(_label, _text)
+
+f_print("Multiplier = " + tostring(timeframe.multiplier) + "\nPeriod = " + timeframe.period + "\nHigh = " + tostring(high))
+
+ibm_15 = security("NYSE:IBM", "15", close)
+
+plot(close)
