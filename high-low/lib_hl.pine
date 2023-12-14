@@ -1,0 +1,107 @@
+//@version=5
+library("libhl", true)
+
+const int MAX_POINTS_SIZE = 10
+
+// https://www.tradingview.com/pine-script-docs/en/v5/concepts/Libraries.html#library-functions
+// These are the constraints
+// - cannot use variables from the library’s global scope unless they are qualified as “const”
+// - you cannot use global variables initialized from script inputs, globally declared arrays
+//
+//const array<string> periodArray = array.from("S", "D", "W", "M", "12M")
+//const array<string> periodTextArray = array.from("session", "day", "week", "month", "year")
+//export periods() => periodArray  // Error: Cannot use global variables in exported functions. Function: periods
+//export periodsText() => periodTextArray
+
+export type AligmentContext
+    int change
+    bool needfix
+export emptyAligmentContext() => AligmentContext.new(0, false)
+export method timeframeChange(AligmentContext frame, simple string period) =>
+    periodisbigger = timeframe.in_seconds(timeframe.period) < timeframe.in_seconds(period)
+    // aligned by session or by day
+    frame.change := periodisbigger and timeframe.change(period) ? -1 : 0
+    if frame.change != 0
+        frame.needfix := true
+    // aligned always by day
+    if frame.needfix and ta.change(dayofmonth) != 0
+        frame.needfix := false
+        frame.change := 1
+
+export type HL
+    varip float high
+    varip float low
+export type Point
+    varip chart.point high
+    varip chart.point low
+    varip chart.point open
+    varip chart.point close
+chartPoint() => chart.point.new(na,na,na)
+export createPoint() => Point.new(chartPoint(), chartPoint(), chartPoint(), chartPoint())
+export type PeriodContext
+    varip Point[] points
+    varip Point curr
+    varip HL max
+    varip float open
+export emptyPeriodContext() => PeriodContext.new(array.new<Point>(), createPoint(), HL.new(), na)
+
+export method processPointArray(PeriodContext ctx, series bool periodChanged) =>
+    // collect data for periods
+    if periodChanged  // 1st bar when period !already! changed
+        if barstate.isnew  // 1st update
+            // transaction - close 0-bar and immediately add new 0-bar
+            if ctx.points.size() > 0
+                pt0 = ctx.points.get(0)  // update
+                pt0.high := chart.point.new(ctx.curr.high.time, ctx.curr.high.index, ctx.curr.high.price)
+                pt0.low := chart.point.new(ctx.curr.low.time, ctx.curr.low.index, ctx.curr.low.price)
+                pt0.close := chart.point.new(time_close[1], bar_index[1], close[1])
+            ctx.points.unshift(Point.new(
+                  high = na,
+                  low =  na,
+                  open = chart.point.new(time, bar_index, nz(close[1], open)),  // use last close
+                  close = na))
+            // limit size
+            if ctx.points.size() > MAX_POINTS_SIZE
+                ctx.points.pop()
+            // reset for max/min
+            ctx.curr.high.price := high  // 'var' not updated on isnew !
+            ctx.curr.low.price := low    // 'varip' used for 'curr'
+    // protection against updating on every tick (no effect on 'high/low', but important for 'close')
+    if barstate.isconfirmed
+        // update Cursor price
+        ctx.curr.high.price := math.max(nz(ctx.curr.high.price, high), high)  // 'varip' updated every tick
+        ctx.curr.low.price := math.min(nz(ctx.curr.low.price, low), low)      // every tick
+    // update Cursor time
+    high_changed = ta.change(ctx.curr.high.price) != 0
+    low_changed = ta.change(ctx.curr.low.price) != 0
+    ctx.curr.high.index := high_changed ? bar_index : ctx.curr.high.index
+    ctx.curr.low.index := low_changed ? bar_index : ctx.curr.low.index
+    ctx.curr.high.time := high_changed ? time : ctx.curr.high.time
+    ctx.curr.low.time := low_changed ? time : ctx.curr.low.time
+    // For UI: update 0-point High-Low temporarily
+    if barstate.islastconfirmedhistory or (barstate.isrealtime and barstate.isconfirmed)  // end of history or end of real-time bar
+        if ctx.points.size() > 0
+            pt0 = ctx.points.get(0)
+            pt0.high := chart.point.new(ctx.curr.high.time, ctx.curr.high.index, ctx.curr.high.price)
+            pt0.low := chart.point.new(ctx.curr.low.time, ctx.curr.low.index, ctx.curr.low.price)
+
+export method processPlotData(PeriodContext ctx, series bool periodChanged) =>
+    if barstate.isnew  // 1st update (use varip)
+        if periodChanged
+            // for 'style_linebr' only
+            ctx.max.high := na
+            ctx.max.low := na
+            ctx.open := na
+        else
+            // for 'plot' only
+            if ctx.points.size() > 1
+                pt1 = ctx.points.get(1)  // confirmed High-Low
+                ctx.max.high := pt1.high.price  // na(pt1.high) ? na : pt1.high.price
+                ctx.max.low := pt1.low.price  // na(pt1.low) ? na : pt1.low.price
+            if ctx.points.size() > 0
+                pt0 = ctx.points.get(0)
+                ctx.open := pt0.open.price
+
+export method process(PeriodContext ctx, series bool periodChanged) =>
+    ctx.processPointArray(periodChanged)
+    ctx.processPlotData(periodChanged)

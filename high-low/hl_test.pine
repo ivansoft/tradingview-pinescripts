@@ -1,0 +1,90 @@
+//@version=5
+indicator("HighLowTest")
+import ivansoft/libhl/9 as lib
+
+//simple bool isIntraday = timeframe.isseconds or (timeframe.isintraday and timeframe.multiplier <= 30)
+simple bool isIntraday = timeframe.isintraday
+
+// https://www.moex.com/ru/derivatives/
+const string SESSION_MAIN         = "0000-1850"
+const string SESSION_EVENING      = "1900-2350"
+simple bool isMOEX = syminfo.prefix == "MOEX"
+simple bool isFuture = syminfo.type == "futures"
+simple bool isMoexFuture = isMOEX and isFuture
+timeinrange(simple string period, simple string session_spec) => not na(time(period, session_spec, "Europe/Moscow")) ? 1 : 0
+
+// "D+" timeframes calculated with "settlement-as-close:true" (see 'syminfo.tickerid'), which cannot be changed to 'false'
+var series int sessionChange = na
+var series int barssince = na
+var series int dayChange = na
+
+const array<string> periodArray = array.from("S", "10", "D", "W", "M", "12M")
+const array<string> periodTextArray = array.from("session", "min", "day", "week", "month", "year")
+var map<string,string> periodTextMap = map.new<string,string>()
+defaultLabelText(simple string period, simple int i) => str.format("{0}{1}", periodTextMap.get(period), i)
+
+var map<string,lib.AligmentContext> tfc = map.new<string,lib.AligmentContext>()
+var map<string,lib.PeriodContext> hl = map.new<string,lib.PeriodContext>()
+if bar_index == 0
+    for i = 0 to periodArray.size() - 1
+        periodTextMap.put(periodArray.get(i), periodTextArray.get(i))
+    for key in periodArray
+        hl.put(key, lib.emptyPeriodContext())
+    // "10", "D", "W", "M", "12M"
+    for i = 1 to periodArray.size() - 1
+        tfc.put(periodArray.get(i), lib.emptyAligmentContext())
+
+//detectTimeframeChange(simple string period, series bool changed) => timeframeChange(period, changed)  // Error: Cannot use global variables in overloaded functions
+detectTimeframeChange(simple string period) => tfc.get(period).timeframeChange(period)
+changedBySession(simple string period) => tfc.get(period).change < 0
+changedByDay(simple string period) => tfc.get(period).change > 0
+
+
+if isIntraday
+    if isMoexFuture
+        // +1 = new day start
+        // -1 = new session start
+        sessionChange := ta.change(timeinrange(timeframe.period, SESSION_MAIN))
+        barssince := ta.barssince(sessionChange > 0)
+        detectTimeframeChange("W")
+        detectTimeframeChange("M")
+        detectTimeframeChange("12M")
+        dayChange := ta.change(time("D")) != 0 ? -1 : 0
+        dayChange2 = ta.change(dayofmonth) != 0 ? 1 : 0
+        dayChange := dayChange == 0 ? dayChange2 : dayChange
+    else
+        sessionChange := ta.change(time("D")) != 0 ? -1 : 0
+        dayChange := ta.change(dayofmonth) != 0 ? 1 : 0
+        sessionChange := sessionChange == 0 ? dayChange : sessionChange
+        barssince := ta.barssince(dayChange > 0)
+        // set-up 'tfc.get(**).change'
+        detectTimeframeChange("10")
+        detectTimeframeChange("D")
+        detectTimeframeChange("W")
+        detectTimeframeChange("M")
+        detectTimeframeChange("12M")
+        // set-up 'tfc.get(**).points'
+        hl.get("10").process(tfc.get("10").change < 0)
+        hl.get("D").process(tfc.get("D").change > 0)
+        hl.get("W").process(tfc.get("W").change > 0)
+        hl.get("M").process(tfc.get("M").change > 0)
+        hl.get("12M").process(tfc.get("12M").change > 0)
+
+var simple float normMult = timeframe.multiplier / timeframe.in_seconds("1")
+plot(dayChange, color = color.white)
+plot(sessionChange * 2)
+plot(barssince * normMult, color = color.red)
+
+plot(tfc.get("10").change, color = color.gray)
+plot(tfc.get("D").change * 3, color = color.navy)
+plot(tfc.get("W").change * 4, color = color.lime)
+plot(tfc.get("M").change * 6, color = color.orange)
+plot(tfc.get("12M").change * 10, color = color.fuchsia)
+
+//plot(hl.get("10").points.size(), color = color.yellow)
+//if hl.get("10").points.size() > 1
+//    label.new(chart.point.now(5), text = str.format("{0,time,dd/MM HH:mm}\n{0,time,dd/MM HH:mm}", 
+//          hl.get("10").points.get(0).open.time,
+//          hl.get("10").points.get(1).open.time),
+//          style = label.style_arrowdown)
+
