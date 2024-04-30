@@ -1,0 +1,145 @@
+//
+// https://www.tradingview.com/pine-script-reference/v5/#var_barstate.isnew ...
+//
+//   isconfirmed - 'true' if the script is calculating the last (closing) update of the current bar, next script calculation will be on the new bar data
+//   isfirst - 'true' if current bar is first bar in barset
+//   ishistory - 'true' if current bar is a historical bar
+//   islast - 'true' if current bar is the last bar in barset, always 'true' for real-time bars
+//   islastconfirmedhistory - 'true' if bar is the last bar when market is closed or if bar is immediately preceding the real-time bar when market is open
+//   isnew - always 'true' when calculating on historical bars or on first update of a newly generated real-time bar
+//   isrealtime - 'true' if current bar is a real-time bar
+//
+
+// |     history              | last history | history#uncompleted |  realtime | update#last |  new bar  |  realtime | update#last | ... 
+// | isnew 1                  |      1       |         1           |   1 -> 0  |      0      |   0 -> 1  |   1 -> 0  |      0      |     
+// | isconfirmed 1            |      1       |       1 -> 0        |     0     |    0 -> 1   |   1 -> 0  |     0     |    0 -> 1   |     
+// | isrealtime 0             |      0       |         0 !         |   0 -> 1  |      1      |     1     |     1     |      1      |     
+// | isfirst 0                |      0       |         0           |     0     |      0      |     0     |     0     |      0      |     
+// | islast 0                 |      0       |       0 -> 1        |     1     |      1      |     1     |     1     |      1      |     
+// | islastconfirmedhistory 0 |    0 -> 1    |       1 -> 0        |     0     |      0      |     0     |     0     |      0      |     
+// | ishistory 1              |      1       |         1 !         |   1 -> 0  |      0      |     0     |     0     |      0      |     
+
+// {{ [var|varip] count = count + 1 }} 
+// empty - reset on each bar, result is '1'
+// var - do not reset, changed '+1' per bar, result is 'bar_index+1'
+// varip - like var + intra-bar, result is 'bar_index + <all ticks>'
+// 
+// varip - "count ticks per history", 1 tick per history bar
+// 'isnew' can be used to reset 'varip' to get "count ticks per bar"
+// 
+
+
+//@version=5
+indicator("Test Barstate", "barstate", overlay = true, max_labels_count = 250, calc_bars_count = 25)
+
+var testLbl = label.new(na,na,"test",yloc=yloc.abovebar,style=label.style_arrowdown)
+testLbl.set_point(chart.point.now())  // updated every tick !
+testLbl.set_text(str.format("test\n{0}\n{1}\n{2}",chart.point.now().price,timenow,chart.point.now().time))
+
+sprintf(simple string fmt) => fmt
+sprintf(simple string fmt, string arg1) => str.format(fmt, arg1)
+sprintf(simple string fmt, string arg1, string arg2) => str.format(fmt, arg1, arg2)
+sprintf(simple string fmt, string arg1, string arg2, string arg3) => str.format(fmt, arg1, arg2, arg3)
+sprintf(simple string fmt, string arg1, string arg2, string arg3, string arg4) => str.format(fmt, arg1, arg2, arg3, arg4)
+sprintf(simple string fmt, int arg1) => str.format(fmt, arg1)
+sprintf(simple string fmt, int arg1, int arg2) => str.format(fmt, arg1, arg2)
+sprintf(simple string fmt, int arg1, int arg2, int arg3) => str.format(fmt, arg1, arg2, arg3)
+sprintf(simple string fmt, int arg1, int arg2, int arg3, int arg4) => str.format(fmt, arg1, arg2, arg3, arg4)
+sprintf(simple string fmt, float arg1) => str.format(fmt, arg1)
+sprintf(simple string fmt, float arg1, float arg2) => str.format(fmt, arg1, arg2)
+sprintf(simple string fmt, float arg1, float arg2, float arg3) => str.format(fmt, arg1, arg2, arg3)
+sprintf(simple string fmt, float arg1, float arg2, float arg3, float arg4) => str.format(fmt, arg1, arg2, arg3, arg4)
+
+
+template_label_below(string txt) => label.new(x = bar_index, y = na, yloc = yloc.belowbar, style = label.style_arrowup, size = size.small, color = color.new(color.blue, 75), text = txt)
+template_label_upper(string txt) => label.new(x = bar_index, y = na, yloc = yloc.abovebar, style = label.style_arrowdown, size = size.small, color = color.new(color.blue, 75), text = txt)
+
+blabel0(string txt) => template_label_below(sprintf("{0}", txt))
+blabel1(string txt) => template_label_below(sprintf("\n{0}", txt))
+blabel2(string txt) => template_label_below(sprintf("\n\n{0}", txt))
+blabel3(string txt) => template_label_below(sprintf("\n\n\n{0}", txt))
+blabel4(string txt) => template_label_below(sprintf("\n\n\n\n{0}", txt))
+blabel5(string txt) => template_label_below(sprintf("\n\n\n\n\n{0}", txt))
+blabel6(string txt) => template_label_below(sprintf("\n\n\n\n\n\n{0}", txt))
+alabel0(string txt) => template_label_below(sprintf("{0}", txt))
+alabel1(string txt) => template_label_below(sprintf("\n{0}", txt))
+alabel2(string txt) => template_label_below(sprintf("\n{0}", txt))
+alabel3(string txt) => template_label_below(sprintf("\n\n\n{0}", txt))
+alabel4(string txt) => template_label_below(sprintf("\n\n\n\n{0}", txt))
+alabel5(string txt) => template_label_below(sprintf("\n\n\n\n\n{0}", txt))
+alabel6(string txt) => template_label_below(sprintf("\n\n\n\n\n\n{0}", txt))
+
+
+type Barstate
+    varip bool isfirst
+    varip bool isconfirmed
+    varip bool ishistory
+    varip bool islast
+    varip bool islastconfirmedhistory
+    varip bool isnew
+    varip bool isrealtime
+var first_barstate = Barstate.new()
+var body_barstate = Barstate.new()
+var last_barstate = Barstate.new()
+// log.info("isnew {0} prev {1}", barstate.isnew?1:0, first_barstate.isnew?1:0)  // test varip
+
+
+if barstate.isconfirmed
+    if not barstate.isrealtime
+        blabel0(sprintf("isnew {0}", barstate.isnew ? 1 : 0))
+        blabel1(sprintf("isconfirmed {0}", barstate.isconfirmed ? 1 : 0))
+        blabel2(sprintf("isrealtime {0}", barstate.isrealtime ? 1 : 0))
+        blabel3(sprintf("isfirst {0}", barstate.isfirst ? 1 : 0))
+        blabel4(sprintf("islast {0}", barstate.islast ? 1 : 0))
+        blabel5(sprintf("islastconfirmedhistory {0}", barstate.islastconfirmedhistory ? 1 : 0))
+        blabel6(sprintf("ishistory {0}", barstate.ishistory ? 1 : 0))
+    else
+        blabel0(sprintf("isnew {0}->({1}->{2}->{3})", last_barstate.isnew ? 1 : 0, first_barstate.isnew ? 1 : 0, body_barstate.isnew ? 1 : 0, barstate.isnew ? 1 : 0))
+        blabel1(sprintf("isconfirmed {0}->({1}->{2}->{3})", last_barstate.isconfirmed ? 1 : 0, first_barstate.isconfirmed ? 1 : 0, body_barstate.isconfirmed ? 1 : 0, barstate.isconfirmed ? 1 : 0))
+        blabel2(sprintf("isrealtime {0}->({1}->{2}->{3})", last_barstate.isrealtime ? 1 : 0, first_barstate.isrealtime ? 1 : 0, body_barstate.isrealtime ? 1 : 0, barstate.isrealtime ? 1 : 0))
+        blabel3(sprintf("isfirst {0}->({1}->{2}->{3})", last_barstate.isfirst ? 1 : 0, first_barstate.isfirst ? 1 : 0, body_barstate.isfirst ? 1 : 0, barstate.isfirst ? 1 : 0))
+        blabel4(sprintf("islast {0}->({1}->{2}->{3})", last_barstate.islast ? 1 : 0, first_barstate.islast ? 1 : 0, body_barstate.islast ? 1 : 0, barstate.islast ? 1 : 0))
+        blabel5(sprintf("islastconfirmedhistory {0}->({1}->{2}->{3})", last_barstate.islastconfirmedhistory ? 1 : 0, first_barstate.islastconfirmedhistory ? 1 : 0, body_barstate.islastconfirmedhistory ? 1 : 0, barstate.islastconfirmedhistory ? 1 : 0))
+        blabel6(sprintf("ishistory {0}->({1}->{2}->{3})", last_barstate.ishistory ? 1 : 0, first_barstate.ishistory ? 1 : 0, body_barstate.ishistory ? 1 : 0, barstate.ishistory ? 1 : 0))
+    last_barstate.isfirst := barstate.isfirst
+    last_barstate.isconfirmed := barstate.isconfirmed
+    last_barstate.ishistory := barstate.ishistory
+    last_barstate.islast := barstate.islast
+    last_barstate.islastconfirmedhistory := barstate.islastconfirmedhistory
+    last_barstate.isnew := barstate.isnew
+    last_barstate.isrealtime := barstate.isrealtime
+else if barstate.isnew
+    blabel0(sprintf("isnew {0}->({1})", last_barstate.isnew ? 1 : 0, barstate.isnew ? 1 : 0))
+    blabel1(sprintf("isconfirmed {0}->({1})", last_barstate.isconfirmed ? 1 : 0, barstate.isconfirmed ? 1 : 0))
+    blabel2(sprintf("isrealtime {0}->({1})", last_barstate.isrealtime ? 1 : 0, barstate.isrealtime ? 1 : 0))
+    blabel3(sprintf("isfirst {0}->({1})", last_barstate.isfirst ? 1 : 0, barstate.isfirst ? 1 : 0))
+    blabel4(sprintf("islast {0}->({1})", last_barstate.islast ? 1 : 0, barstate.islast ? 1 : 0))
+    blabel5(sprintf("islastconfirmedhistory {0}->({1})", last_barstate.islastconfirmedhistory ? 1 : 0, barstate.islastconfirmedhistory ? 1 : 0))
+    blabel6(sprintf("ishistory {0}->({1})", last_barstate.ishistory ? 1 : 0, barstate.ishistory ? 1 : 0))
+    first_barstate.isfirst := barstate.isfirst
+    first_barstate.isconfirmed := barstate.isconfirmed
+    first_barstate.ishistory := barstate.ishistory
+    first_barstate.islast := barstate.islast
+    first_barstate.islastconfirmedhistory := barstate.islastconfirmedhistory
+    first_barstate.isnew := barstate.isnew
+    first_barstate.isrealtime := barstate.isrealtime
+else
+    blabel0(sprintf("isnew {0}->({1}->{2})", last_barstate.isnew ? 1 : 0, first_barstate.isnew ? 1 : 0, barstate.isnew ? 1 : 0))
+    blabel1(sprintf("isconfirmed {0}->({1}->{2})", last_barstate.isconfirmed ? 1 : 0, first_barstate.isconfirmed ? 1 : 0, barstate.isconfirmed ? 1 : 0))
+    blabel2(sprintf("isrealtime {0}->({1}->{2})", last_barstate.isrealtime ? 1 : 0, first_barstate.isrealtime ? 1 : 0, barstate.isrealtime ? 1 : 0))
+    blabel3(sprintf("isfirst {0}->({1}->{2})", last_barstate.isfirst ? 1 : 0, first_barstate.isfirst ? 1 : 0, barstate.isfirst ? 1 : 0))
+    blabel4(sprintf("islast {0}->({1}->{2})", last_barstate.islast ? 1 : 0, first_barstate.islast ? 1 : 0, barstate.islast ? 1 : 0))
+    blabel5(sprintf("islastconfirmedhistory {0}->({1}->{2})", last_barstate.islastconfirmedhistory ? 1 : 0, first_barstate.islastconfirmedhistory ? 1 : 0, barstate.islastconfirmedhistory ? 1 : 0))
+    blabel6(sprintf("ishistory {0}->({1}->{2})", last_barstate.ishistory ? 1 : 0, first_barstate.ishistory ? 1 : 0, barstate.ishistory ? 1 : 0))
+    body_barstate.isfirst := barstate.isfirst
+    body_barstate.isconfirmed := barstate.isconfirmed
+    body_barstate.ishistory := barstate.ishistory
+    body_barstate.islast := barstate.islast
+    body_barstate.islastconfirmedhistory := barstate.islastconfirmedhistory
+    body_barstate.isnew := barstate.isnew
+    body_barstate.isrealtime := barstate.isrealtime
+
+
+// plot(close)
+
+
