@@ -1,0 +1,81 @@
+//
+// https://www.tradingview.com/pine-script-docs/en/v5/concepts/Timeframes.html#timeframe-string-specifications
+//   "S” for seconds, "D” for days, "W” for weeks and "M” for months
+//   "1S”, "30” (30 minutes), "1D” (one day), "3M” (three months)
+//   "1” is interpreted as "1min”, "S” is equivalent to "1S”, "D” to "1D, etc.
+//
+
+const int CALC_BARS_COUNT = 100
+
+//@version=5
+indicator("Test Multi-timeframe", "test_mtf", overlay = true, max_labels_count = 25)
+import TradingView/ta/7 as tta
+
+// selectAutoTimeframe() =>
+var htfTimeframe = 
+     timeframe.isseconds and timeframe.multiplier <= 15 ? '5':     // 5min
+     timeframe.isseconds ? '15':
+     timeframe.isminutes and timeframe.multiplier <= 1 ? '120':    // 2h
+     timeframe.isminutes and timeframe.multiplier <= 5 ? '1440':   // 1d
+     timeframe.isminutes and timeframe.multiplier <= 15 ? '1440':
+     timeframe.isminutes and timeframe.multiplier <= 45 ? '1440':
+     timeframe.isminutes ? '2880':
+     timeframe.isdaily ? 'W':
+     timeframe.isweekly ? 'M':
+     timeframe.ismonthly and timeframe.multiplier < 3 ? '3M': '12M'
+
+// wrong - trading hours are not 24/7
+//var htfTimeframeLength = timeframe.in_seconds(htfTimeframe) / timeframe.in_seconds()
+//log.info("{0}/{1}={2}", timeframe.in_seconds(htfTimeframe), timeframe.in_seconds(), htfTimeframeLength)
+
+// gaps
+//   how the returned values are merged on chart
+// gaps_on - value only appears on the current chart bar when it first becomes available, otherwise na ("gap")
+// gaps_off - gaps are filled with the latest known value
+// lookahead
+//   on historical bars only, returns data from the timeframe before it elapses
+//   has no effect on realtime values
+// lookahead_on - at higher timeframes without offsetting the expression (close -> close[1]) will introduce future leak in scripts
+//                as the function will then return the close price before it is actually known in the current context
+//                https://www.tradingview.com/pine-script-docs/en/v5/concepts/Repainting.html#future-leak-with-request-security
+//                https://www.tradingview.com/pine-script-docs/en/v5/concepts/Repainting.html#pagerepainting-historicalvsrealtimecalculations-repaintingrequestsecuritycalls
+//                
+[htfLow, htfTime] = request.security(syminfo.tickerid, htfTimeframe, expression = [low, time], lookahead = barmerge.lookahead_off, gaps = barmerge.gaps_on)
+
+//series int htfIndex = na
+//htfIndex := na(htfTime) ? na(htfIndex[1]) ? na : htfIndex[1] : (time - htfTime) / (timeframe.in_seconds() * 1000)
+
+var series int htfCount = 0
+
+if not na(htfLow)
+    label.new(htfTime, htfLow, str.format("{0}\n__",htfCount), xloc.bar_time, yloc.price, style = label.style_none)
+    line.new(htfTime, htfLow, time, htfLow, xloc.bar_time, style = line.style_dashed, color = color.blue)
+    htfCount := htfCount + 1
+
+plot(htfLow, linewidth = 3, style = plot.style_circles, color = color.purple)
+
+// series can't be modified (the past can't be modified)
+//series float htfLowAdapted = na
+//if not na(htfTime)
+//    for i = bar_index - ((time - htfTime) / (timeframe.in_seconds() * 1000)) to 0
+//        htfLowAdapted[i] = htfLow  // <-- Error (:= = - no matter)
+
+n0(int source) => nz(source, 0) < 1 ? 1 : source
+
+series float domHigh = na
+dombars = ta.barssince(ta.change(dayofmonth) != 0) + 1
+domhighest = ta.highest(high, nz(dombars[1],1))
+domhighestbars = ta.highestbars(high, nz(dombars[1],1))  // first bar within top, but '-' [-123, -124, ...] // double top!! same high
+domhighestsince = ta.barssince(high >= domhighest)       // last bar within top, but '+'   [122, 123, ...]  //
+//log.info("{0} {1} {2} {3}",domhighestbars,domhighestsince,bar_index+domhighestbars,bar_index-domhighestsince) // [-67,-67,20509,20509] [-118,117,20684,20685]
+//log.info("{0}",dombars)
+//log.info("{0} {1}", ta.highest(high,1), high)  // equals!!
+var domprevindex = -1
+if ta.change(dayofmonth) != 0
+    domHigh := domhighest
+    line.new(bar_index+domhighestbars, domhighest, bar_index, domhighest, xloc.bar_index, style = line.style_dashed, color = color.black)
+    domprevindex := bar_index
+
+plot(domHigh, linewidth = 3, style = plot.style_circles, color = color.blue)
+//if not na(domHigh)
+//    line.new(htfTime, htfLow, time, htfLow, xloc.bar_time, style = line.style_dashed, color = color.blue)
