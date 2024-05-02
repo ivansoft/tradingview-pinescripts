@@ -1,0 +1,74 @@
+//
+// https://www.tradingcode.net/ - "Pine Script" tutorials
+// https://www.tradingview.com/script/BICzyhq0-ta/ - Library "ta"
+// https://www.tradingview.com/script/cZnSLls2-RelativeValue/ - "RelativeValue"
+// https://www.tradingview.com/script/ZaliXFLV-Volume-Spike-Analysis-Trendoscope/ - "Volume Spike Analysis"
+//
+
+//@version=5
+indicator("VolumeSpikeTest", shorttitle = "vs_test", format = format.volume)
+
+prevvolume = volume[1]  // shifted volume (current value not included)
+
+// median5 = ta.median(prevvolume, 5)
+// median10 = ta.median(prevvolume, 10)
+// median20 = ta.median(prevvolume, 20)
+// median30 = ta.median(prevvolume, 30)
+
+var day2secs = 2 * 24 * 60 * 60
+var day3secs = 3 * 24 * 60 * 60
+var day4secs = 3 * 24 * 60 * 60
+var day5secs = 5 * 24 * 60 * 60
+var day7secs = 7 * 24 * 60 * 60
+var hour1secs = 1 * 60 * 60
+var hour2secs = 2 * 60 * 60
+var hour4secs = 4 * 60 * 60
+var hour5secs = 5 * 60 * 60
+var min10secs = 10 * 60
+var min15secs = 15 * 60
+var min20secs = 20 * 60
+var min30secs = 30 * 60
+var day2length = math.ceil(day2secs / timeframe.in_seconds())
+var day3length = math.ceil(day3secs / timeframe.in_seconds())
+var day4length = math.ceil(day4secs / timeframe.in_seconds())
+var day5length = math.ceil(day5secs / timeframe.in_seconds())
+var day7length = math.ceil(day7secs / timeframe.in_seconds())
+var hour1length = math.ceil(hour1secs / timeframe.in_seconds())
+var hour2length = math.ceil(hour2secs / timeframe.in_seconds())
+var hour4length = math.ceil(hour4secs / timeframe.in_seconds())
+var hour5length = math.ceil(hour5secs / timeframe.in_seconds())
+var min10length = math.ceil(min10secs / timeframe.in_seconds())
+var min15length = math.ceil(min15secs / timeframe.in_seconds())
+var min20length = math.ceil(min20secs / timeframe.in_seconds())
+var min30length = math.ceil(min30secs / timeframe.in_seconds())
+median2d = ta.median(prevvolume, day2length)
+median1h = ta.median(prevvolume, hour1length)
+median2h = ta.median(prevvolume, hour2length)
+median5h = ta.median(prevvolume, hour5length)
+atr2d = ta.sma(prevvolume, day2length)
+atr2h = ta.sma(prevvolume, hour2length)
+highest2d = ta.highest(prevvolume, day2length)
+highest2h = ta.highest(prevvolume, hour2length)
+highest5h = ta.highest(prevvolume, hour5length)
+
+percentile2d = ta.percentile_linear_interpolation(prevvolume, day2length, 99.9)
+percentile4d = ta.percentile_linear_interpolation(prevvolume, day4length, 99.9)
+percentile5d = ta.percentile_linear_interpolation(prevvolume, day5length, 99)
+percentile7d = ta.percentile_linear_interpolation(prevvolume, day7length, 99)
+
+
+
+plot(volume, 'vol', color.new(color.gray,40), 3, plot.style_histogram, force_overlay = false, display = display.all)
+plot(percentile4d, 'percent99d4', color.fuchsia, display = display.all-display.price_scale)  // error on 1m
+plot(percentile2d, 'percent99d2', color.orange, display = display.all-display.price_scale)
+plot(highest2d, 'highest2d', color.yellow, display = display.all-display.price_scale)
+plot(highest5h, 'highest5h', color.yellow, display = display.all-display.price_scale)
+plot(highest2h, 'highest2h', color.yellow, display = display.all-display.price_scale)
+plot(median5h, 'median5h', color.blue, display = display.all-display.price_scale)
+plot(median2d, 'median2d', color.blue, display = display.all-display.price_scale)
+plot(atr2d, 'atr2d', color.green, display = display.all-display.price_scale)
+plot(atr2h, 'atr2h', color.green, display = display.all-display.price_scale)
+plot(volume/median5h, 'X5h', color.gray, display = display.data_window)
+plot(volume/median2d, 'X2d', color.gray, display = display.data_window)
+plot(volume/atr2d, 'XA2d', color.gray, display = display.data_window)
+
