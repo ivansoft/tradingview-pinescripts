@@ -1,0 +1,70 @@
+//@version=5
+indicator("VolumeSpikeTestCumulative", shorttitle = "vs_test2", format = format.volume)
+
+prevvolume = volume[1]
+
+var day1secs = 1 * 24 * 60 * 60
+var day2secs = 2 * 24 * 60 * 60
+var day3secs = 3 * 24 * 60 * 60
+var day4secs = 3 * 24 * 60 * 60
+var day5secs = 5 * 24 * 60 * 60
+var day7secs = 7 * 24 * 60 * 60
+var hour1secs = 1 * 60 * 60
+var hour2secs = 2 * 60 * 60
+var hour4secs = 4 * 60 * 60
+var hour5secs = 5 * 60 * 60
+var hour8secs = 8 * 60 * 60
+var min10secs = 10 * 60
+var min15secs = 15 * 60
+var min20secs = 20 * 60
+var min30secs = 30 * 60
+var day1length = math.ceil(day1secs / timeframe.in_seconds())
+var day2length = math.ceil(day2secs / timeframe.in_seconds())
+var day3length = math.ceil(day3secs / timeframe.in_seconds())
+var day4length = math.ceil(day4secs / timeframe.in_seconds())
+var day5length = math.ceil(day5secs / timeframe.in_seconds())
+var day7length = math.ceil(day7secs / timeframe.in_seconds())
+var hour1length = math.ceil(hour1secs / timeframe.in_seconds())
+var hour2length = math.ceil(hour2secs / timeframe.in_seconds())
+var hour4length = math.ceil(hour4secs / timeframe.in_seconds())
+var hour5length = math.ceil(hour5secs / timeframe.in_seconds())
+var hour8length = math.ceil(hour8secs / timeframe.in_seconds())
+var min10length = math.ceil(min10secs / timeframe.in_seconds())
+var min15length = math.ceil(min15secs / timeframe.in_seconds())
+var min20length = math.ceil(min20secs / timeframe.in_seconds())
+var min30length = math.ceil(min30secs / timeframe.in_seconds())
+
+
+cumulative10m = math.sum(prevvolume, min10length)
+cumulative15m = math.sum(prevvolume, min15length)
+cumulative20m = math.sum(prevvolume, min20length)
+cumulative30m = math.sum(prevvolume, min30length)
+cumulative1h = math.sum(prevvolume, hour1length)
+cumulative2h = math.sum(prevvolume, hour2length)
+cumulative4h = math.sum(prevvolume, hour4length)
+cumulative8h = math.sum(prevvolume, hour8length)
+cumulative1d = math.sum(prevvolume, day1length)
+
+percentileCum2d10m = ta.percentile_linear_interpolation(cumulative10m, day2length, 90)
+percentileCum2d30m = ta.percentile_linear_interpolation(cumulative30m, day2length, 90)
+percentileCum4d1h = ta.percentile_linear_interpolation(cumulative1h, day4length, 90)
+percentileCum2d2h = ta.percentile_linear_interpolation(cumulative2h, day2length, 90)
+percentileCum4d2h = ta.percentile_linear_interpolation(cumulative2h, day4length, 90)
+percentileCum5d2h = ta.percentile_linear_interpolation(cumulative2h, day5length, 90)
+percentileCum7d2h = ta.percentile_linear_interpolation(cumulative2h, day7length, 90)
+percentileCum4d8h = ta.percentile_linear_interpolation(cumulative8h, day4length, 85)
+percentileCum7d8h = ta.percentile_linear_interpolation(cumulative8h, day7length, 90)
+
+plot(cumulative10m, 'cum10m', color.gray, display = display.all-display.price_scale)
+plot(percentileCum2d10m, 'pcum10m2d', color.gray, display = display.all-display.price_scale)
+plot(cumulative15m, 'cum15m', color.gray, display = display.all-display.price_scale)
+plot(cumulative20m, 'cum20m', color.gray, display = display.all-display.price_scale)
+plot(cumulative30m, 'cum30m', color.gray, display = display.all-display.price_scale)
+plot(cumulative1h, 'cum1h', color.gray, display = display.all-display.price_scale)
+plot(cumulative2h, 'cum2h', color.gray, display = display.all-display.price_scale)
+//plot(cumulative4h, 'cum4h', color.gray, display = display.all-display.price_scale)
+// plot(cumulative8h, 'cum8h', color.gray, display = display.all-display.price_scale)
+//plot(cumulative1d, 'cum1d', color.gray, display = display.all-display.price_scale)
+plot(percentileCum2d2h, 'pcum2h2d', color.gray, display = display.all-display.price_scale)
+plot(percentileCum4d2h, 'pcum2h4d', color.gray, display = display.all-display.price_scale)
+// plot(percentileCum4d8h, 'pcum8h4d', color.gray, display = display.all-display.price_scale)
