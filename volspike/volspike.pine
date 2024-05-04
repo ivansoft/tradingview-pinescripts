@@ -1,0 +1,43 @@
+//@version=5
+indicator("VolumeSpike", shorttitle = "vs", overlay = true, max_lines_count = 150)
+
+var day2secs = 2 * 24 * 60 * 60
+var day3secs = 3 * 24 * 60 * 60
+var day4secs = 3 * 24 * 60 * 60
+var day5secs = 5 * 24 * 60 * 60
+var day7secs = 7 * 24 * 60 * 60
+var hour1secs = 1 * 60 * 60
+var hour2secs = 2 * 60 * 60
+var hour4secs = 4 * 60 * 60
+var hour5secs = 5 * 60 * 60
+var hour7secs = 7 * 60 * 60
+var min10secs = 10 * 60
+var min15secs = 15 * 60
+var min20secs = 20 * 60
+var min30secs = 30 * 60
+var day2length = math.ceil(day2secs / timeframe.in_seconds())
+var day3length = math.ceil(day3secs / timeframe.in_seconds())
+var day4length = math.ceil(day4secs / timeframe.in_seconds())
+var day5length = math.ceil(day5secs / timeframe.in_seconds())
+var day7length = math.ceil(day7secs / timeframe.in_seconds())
+var hour1length = math.ceil(hour1secs / timeframe.in_seconds())
+var hour2length = math.ceil(hour2secs / timeframe.in_seconds())
+var hour4length = math.ceil(hour4secs / timeframe.in_seconds())
+var hour5length = math.ceil(hour5secs / timeframe.in_seconds())
+var hour7length = math.ceil(hour7secs / timeframe.in_seconds())
+var min10length = math.ceil(min10secs / timeframe.in_seconds())
+var min15length = math.ceil(min15secs / timeframe.in_seconds())
+var min20length = math.ceil(min20secs / timeframe.in_seconds())
+var min30length = math.ceil(min30secs / timeframe.in_seconds())
+
+[htfpivotlow] = request.security(syminfo.tickerid, timeframe.from_seconds(hour1secs), expression = [ta.pivotlow(2,2)], lookahead = barmerge.lookahead_off, gaps = barmerge.gaps_on)
+[htfpivothigh] = request.security(syminfo.tickerid, timeframe.from_seconds(hour1secs), expression = [ta.pivothigh(2,2)], lookahead = barmerge.lookahead_off, gaps = barmerge.gaps_on)
+pivotbarslow = ta.lowestbars(hour1length * (2 + 1))
+pivotbarshigh = ta.highestbars(hour1length * (2 + 1))
+// plot(ta.linreg(hlc3, hour7length, 0))
+plot(htfpivotlow, linewidth = 2, style = plot.style_circles)
+plot(htfpivothigh, linewidth = 2, style = plot.style_circles)
+if not na(htfpivotlow)
+    line.new(bar_index+pivotbarslow, htfpivotlow, bar_index, htfpivotlow, style = line.style_dashed)
+if not na(htfpivothigh)
+    line.new(bar_index+pivotbarshigh, htfpivothigh, bar_index, htfpivothigh, style = line.style_dashed)
