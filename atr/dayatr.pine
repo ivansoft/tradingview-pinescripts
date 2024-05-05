@@ -1,0 +1,28 @@
+//@version=5
+indicator("dayatr", overlay = true)
+
+
+// DAY ATR levels
+//[atr1D, lengthD, atrDD] = request.security(syminfo.tickerid, "D", [ta.atr(1), bar_index+1, ta.median(ta.atr(1),bar_index+1)], lookahead = barmerge.lookahead_off)
+//atrD = ta.median(atr1D, lengthD) // 9.9 vs 16.7
+const int atrDlength = 30
+
+[atrUpD,atrDnD,atrUpMaxD,atrDnMaxD] = request.security(syminfo.tickerid, "D", [
+     ta.median(high-open,atrDlength), ta.median(open-low,atrDlength),
+     ta.percentile_linear_interpolation(high-open,atrDlength,85), ta.percentile_linear_interpolation(open-low,atrDlength,85)],
+     lookahead = barmerge.lookahead_off)
+
+var int daylength = na
+daychange = ta.change(dayofmonth) != 0 // TODO: change "D"
+daychangelength = ta.barssince(daychange)
+if daychange
+    daylength := daychangelength[1]
+
+if daychange and not na(daylength)
+    line.new(bar_index, open+atrUpD, bar_index+daylength, open+atrUpD, style = line.style_dashed, color = color.new(color.gray,50))
+    line.new(bar_index, open-atrDnD, bar_index+daylength, open-atrDnD, style = line.style_dashed, color = color.new(color.gray,50))
+    line.new(bar_index, open+atrUpMaxD, bar_index+daylength, open+atrUpMaxD, style = line.style_dotted, color = color.new(color.gray,50))
+    line.new(bar_index, open-atrDnMaxD, bar_index+daylength, open-atrDnMaxD, style = line.style_dotted, color = color.new(color.gray,50))
+    // 27.9 9.9 16.7 141 405
+    //log.info("{0} {1} {2} {3} {4} {5}", atr1D, atrD, atrDD, lengthD, daylength)
+
