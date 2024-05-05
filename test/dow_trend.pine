@@ -1,0 +1,6 @@
+//@version=5
+indicator("dow_trend", overlay = true)
+
+// Dow's definition of Trend
+plotchar(high < high[1], char = "v", location = location.abovebar, color = color.new(color.red,50), size = size.tiny, display = display.pane)
+plotchar(low > low[1], char = "^", location = location.belowbar, color = color.new(color.green,0), size = size.tiny, display = display.pane)
