@@ -1,0 +1,31 @@
+//@version=5
+indicator("barzones", overlay = true)
+
+var i_highlow = input.bool(true, "Display HL") ? display.pane+display.data_window : display.none
+var i_bodyhighlow = input.bool(false, "Display Body HL") ? display.pane+display.data_window : display.none
+
+// barszones
+hl4 = (high - low) / 4 + low
+hl43 = (high - low) * 3 / 4 + low
+
+bodyhigh = math.max(open,close)
+bodylow = math.min(open,close)
+
+// body barszones
+bhl2 = (bodyhigh - bodylow) / 2 + bodylow
+bhl4 = (bodyhigh - bodylow) / 4 + bodylow
+bhl43 = (bodyhigh - bodylow) * 3 / 4 + bodylow
+
+plot(hl2, "hl2", color.blue, linewidth = 2, style = plot.style_cross, display = i_highlow)
+plot(hl4, "hl4", color.blue, linewidth = 2, style = plot.style_cross, display = i_highlow)
+plot(hl43, "hl43", color.blue, linewidth = 2, style = plot.style_cross, display = i_highlow)
+
+plot(bhl2, "bhl2", color.black, linewidth = 2, style = plot.style_circles, display = i_bodyhighlow)
+plot(bhl4, "bhl4", color.black, linewidth = 2, style = plot.style_circles, display = i_bodyhighlow)
+plot(bhl43, "bhl43", color.black, linewidth = 2, style = plot.style_circles, display = i_bodyhighlow)
+
+// big body detection
+prevbarBody43 = math.abs(open[1]-close[1]) >= hl43[1]-hl4[1]  // body >= 2/4 candle
+
+plotchar(prevbarBody43, "body", "*", location.abovebar, color.new(color.black,50), -1, size = size.tiny, display = display.pane)
+
