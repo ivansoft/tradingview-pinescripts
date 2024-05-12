@@ -1,0 +1,56 @@
+//@version=5
+indicator("ATRTest", shorttitle = "atr_test")
+
+var day2length = math.ceil(2*24*60*60 / timeframe.in_seconds())
+var day4length = math.ceil(4*24*60*60 / timeframe.in_seconds())
+var day5length = math.ceil(5*24*60*60 / timeframe.in_seconds())
+var int daylength = switch
+    timeframe.in_seconds() <= 5*60 => math.ceil(2*24*60*60 / timeframe.in_seconds())  // 5min - 2days
+    timeframe.in_seconds() <= 2*60*60 => math.ceil(5*24*60*60 / timeframe.in_seconds())  // 2hrs - 5days
+    timeframe.in_seconds() <= 1*24*60*60 => math.ceil(365*24*60*60/2 / timeframe.in_seconds())  // 1day - 180days
+    timeframe.in_seconds() <= 7*24*60*60 => math.ceil(365*24*60*60/1.5 / timeframe.in_seconds())  // 7day - 243days
+    timeframe.in_seconds() <= 31*24*60*60 => math.ceil(365*24*60*60 / timeframe.in_seconds())  // 31day - 365days
+    => math.ceil(365*24*60*60 / timeframe.in_seconds())  // 365days
+
+pine_atr(length) =>
+    trueRange = na(close[1]) ? high-low : math.max(math.max(high-low, math.abs(high-close[1])), math.abs(low-close[1]))
+    ta.rma(trueRange, length)  //true range can be also calculated with ta.tr(true)
+pine_atr_body(length) =>
+    trueRange = math.abs(close-open)
+    ta.rma(trueRange, length)
+
+atr1 = ta.atr(1) //pine_atr(1)
+p50atr = ta.median(atr1, daylength)
+p60atr = ta.percentile_linear_interpolation(atr1, daylength, 60)
+p65atr = ta.percentile_linear_interpolation(atr1, daylength, 65)
+p70atr = ta.percentile_linear_interpolation(atr1, daylength, 70)
+p75atr = ta.percentile_linear_interpolation(atr1, daylength, 75)
+p90atr = ta.percentile_linear_interpolation(atr1, daylength, 90)
+p95atr = ta.percentile_linear_interpolation(atr1, daylength, 95)
+atrb1 = pine_atr_body(1)
+p50atrb = ta.median(atrb1, daylength)
+p75atrb = ta.percentile_linear_interpolation(atrb1, daylength, 75)
+p90atrb = ta.percentile_linear_interpolation(atrb1, daylength, 90)
+p95atrb = ta.percentile_linear_interpolation(atrb1, daylength, 95)
+
+
+pl1=plot(atr1, "atr1", color = color.rgb(175,24,21), display = display.pane+display.data_window)
+plb1=plot(atrb1, "atrb1", color = color.maroon, display = display.pane+display.data_window)
+pl50=plot(p50atr, "P50", color = color.orange, display = display.pane+display.data_window)
+pl75=plot(p75atr, "P75", color = color.gray, display = display.pane+display.data_window)
+pl90=plot(p90atr, "P90", color = color.gray, display = display.pane+display.data_window)
+pl95=plot(p95atr, "P95", color = color.orange, display = display.pane+display.data_window)
+
+//fill(pl1,pl90,color=color.new(color.blue,50))
+
+// barszones
+hl4 = (high - low) / 4 + low
+hl43 = (high - low) * 3 / 4 + low
+barbody43 = math.abs(open-close) >= hl43-hl4  // body >= 2/4 candle
+
+//bigbody = atr1 > p75atr and barbody43
+bigbody = atrb1 >= p75atrb
+bigbar = atr1 > p60atr
+isbig = bigbar and bigbody
+plot(isbig?atr1:na, ">75", color.new(color.blue,75), 3, plot.style_columns, display = display.pane)
+// plot(atrb1>p75atr?atrb1:na, ">75", color.new(color.blue,75), 3, plot.style_columns, display = display.pane)
