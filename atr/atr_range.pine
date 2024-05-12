@@ -1,0 +1,57 @@
+//@version=5
+indicator("atr_range", overlay = true)
+
+var int day2length = math.ceil(2*24*60*60 / timeframe.in_seconds())
+var int day3length = math.ceil(3*24*60*60 / timeframe.in_seconds())
+var int day4length = math.ceil(4*24*60*60 / timeframe.in_seconds())
+var int day5length = math.ceil(5*24*60*60 / timeframe.in_seconds())
+var int day7length = math.ceil(7*24*60*60 / timeframe.in_seconds())
+var int hour1length = math.ceil(1*60*60 / timeframe.in_seconds())
+var int hour2length = math.ceil(2*60*60 / timeframe.in_seconds())
+var int hour4length = math.ceil(4*60*60 / timeframe.in_seconds())
+var int hour5length = math.ceil(5*60*60 / timeframe.in_seconds())
+var int min10length = math.ceil(10*60 / timeframe.in_seconds())
+var int min15length = math.ceil(15*60 / timeframe.in_seconds())
+var int min20length = math.ceil(20*60 / timeframe.in_seconds())
+var int min30length = math.ceil(30*60 / timeframe.in_seconds())
+//log.info("{0} {1}", min15length, day2length)
+var int daylength = switch
+    timeframe.in_seconds() <= 1*60 => math.ceil(15*60 / timeframe.in_seconds())
+    timeframe.in_seconds() <= 2*60 => math.ceil(1*24*60 / timeframe.in_seconds())
+    timeframe.in_seconds() <= 5*60 => math.ceil(2*24*60*60 / timeframe.in_seconds())
+    timeframe.in_seconds() <= 2*60*60 => math.ceil(5*24*60*60 / timeframe.in_seconds())
+    timeframe.in_seconds() <= 1*24*60*60 => math.ceil(14*24*60*60 / timeframe.in_seconds())
+    timeframe.in_seconds() <= 7*24*60*60 => math.ceil(30*24*60*60 / timeframe.in_seconds())
+    timeframe.in_seconds() <= 31*24*60*60 => math.ceil(365*24*60*60/4 / timeframe.in_seconds())
+    => math.ceil(365*24*60*60 / timeframe.in_seconds())
+
+
+// TODO: DO NOT USE 'timeToOffset' - its calculation is !wrong!!
+//timeToOffset(int t) => (time - t) / (timeframe.in_seconds() * 1000)  // msec -> sec -> offset
+//timeToIndex(int t) => bar_index - timeToOffset(t)
+body_atr(length) => ta.rma(math.abs(open - close), length)
+
+// pre-calculated
+prevatr = ta.atr(1)[1]
+prevatrbody = body_atr(1)[1]
+prevhl2 = hl2[1]
+prevhigh = high[1]
+prevlow = low[1]
+
+// 15-min moving ATR below + ATR above
+//calcatr = ta.median(prevatr, min15length)
+calcatr = ta.sma(prevatr, min15length)
+//calcatr = ta.rma(prevatr, daylength)
+//calcatr = ta.sma(prevatr, daylength)
+prevatrx = calcatr * 1.00
+
+levelhigh = prevhl2 + prevatrx
+levellow = prevhl2 - prevatrx
+crosshigh = close > levelhigh and high > nz(high[1],high)  // levelhigh, levellow - crosshigh, crosslow
+crosslow = close < levellow and low < nz(low[1],low)       // 2,491 2,301 - 2,283 2,140
+
+plot(levelhigh, "high", color.new(color.blue,50), 1, plot.style_steplinebr, display = display.pane+display.data_window)
+plot(levellow, "low", color.new(color.blue,50), 1, plot.style_steplinebr, display = display.pane+display.data_window)
+plot(crosshigh ? levelhigh : na, "high", color.new(color.red,50), 4, plot.style_steplinebr, display = display.pane)
+plot(crosslow ? levellow : na, "low", color.new(color.red,50), 4, plot.style_steplinebr, display = display.pane)
+
