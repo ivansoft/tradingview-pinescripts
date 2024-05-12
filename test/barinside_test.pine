@@ -1,0 +1,95 @@
+//@version=5
+indicator("inside_test", overlay = true)
+
+var int day2length = 2*24*60*60 / timeframe.in_seconds()
+// TODO: timeToOffset is wrong, delete this
+timeToOffset(int t) => (time - t) / (timeframe.in_seconds() * 1000)  // msec -> sec -> offset
+
+//custom atr
+body_atr(length) => ta.rma(math.abs(open - close), length)
+
+// pre-calculated
+prevatr = ta.atr(1)[1]
+prevatrbody = body_atr(1)[1]
+
+// flat detection
+type AtrStatContext
+    //float level  // error simple
+    int period
+    float percentile = na  // private
+    float percentileBody = na
+method calculateAtr(AtrStatContext ctx, simple float level) =>
+    ctx.percentile := ta.percentile_linear_interpolation(prevatr, ctx.period, level)
+    ctx.percentileBody := ta.percentile_linear_interpolation(prevatrbody, ctx.period, level)
+method match(AtrStatContext ctx, int offset) => prevatr[offset-1] >= ctx.percentile
+method matchBody(AtrStatContext ctx, int offset) => prevatrbody[offset-1] >= ctx.percentileBody
+
+// calculate X-percentile of ATR
+var atr95d2 = AtrStatContext.new(day2length)
+var atr50d2 = AtrStatContext.new(day2length)
+atr95d2.calculateAtr(95)
+atr50d2.calculateAtr(50)
+
+// algorithms
+isBarbodyInsideAnchor(int offset) =>
+    na(high[offset]) ? false :
+         (low[offset] <= close and close <= high[offset]) and  // close inside anchor [high, low]
+         (low[offset] <= open and open <= high[offset])        // open inside anchor [high, low]
+isBarbodyInsideAnchorBody(int offset) =>
+    na(high[offset]) ? false :
+         (math.min(open[offset],close[offset]) <= close and close <= math.max(open[offset],close[offset])) and
+         (math.min(open[offset],close[offset]) <= open and open <= math.max(open[offset],close[offset]))
+isFalseBreach(int offset) =>
+    na(high[offset]) ? false : isBarbodyInsideAnchor(offset) and
+         //(low < low[offset] or high[offset] < high) and
+         //(low[offset] <= hl4 and hl43 <= high[offset])    // do not exceed 1/4
+         (low[offset] <= hl2 and hl2 <= high[offset])
+
+// logic, composition of algorithms
+isFlatBar(int offset) =>
+    isBarbodyInsideAnchor(offset) or isFalseBreach(offset)
+
+// create history
+type Anchor
+    AtrStatContext atr  // by reference
+    int time_start = na
+    int length = na
+//method created(Anchor ctx) => not na(ctx.time_start)
+method eof(Anchor ctx) => not na(ctx.length)
+method reset(Anchor ctx) =>
+    ctx.time_start := na
+    ctx.length := na
+method check(Anchor ctx, int offset) =>
+    isFlatBar = isFlatBar(offset)
+    isBarMatchedAtr = ctx.atr.match(offset)
+    [isFlatBar, isBarMatchedAtr]
+method calculate(Anchor ctx) =>
+    anchor_time = nz(ctx.time_start, time[1])  // by default time[1]
+    offset = timeToOffset(anchor_time)         // always recalculate
+    [isFlatBar, isBarMatchedAtr] = ctx.check(offset)
+    // (1) while in flat - pass old value
+    if isFlatBar
+        if isBarMatchedAtr
+            ctx.time_start := anchor_time
+    // (2) if breached - save length (EOF - end of flat)
+    else if not na(ctx.time_start)
+        ctx.length := offset
+    // (3) do not reset here, save to history first, then reset on next bar
+    offset
+
+var anchors = array.new<Anchor>()
+var cursor = Anchor.new(atr50d2)  // candle >= atr95
+// before calculate
+if cursor.eof()
+    anchors.push(cursor.copy())
+    cursor.reset()
+    //log.info("{0} {1} {2} {3}", cursor.length, anchors.last().length, anchors.size(), bar_index)
+offset = cursor.calculate()
+
+[isFlatBar, isBarMatchedAtr] = cursor.check(offset)
+flatcolor = isFlatBar and isBarMatchedAtr ? na : color.new(color.olive, 92)
+bgcolor(flatcolor, editable = false)
+
+plot(isFlatBar and isBarMatchedAtr?high[offset]:na, "flat", color.new(color.olive,25), 1, plot.style_linebr, display = display.pane+display.data_window)
+plot(isFlatBar and isBarMatchedAtr?low[offset]:na, "flat", color.new(color.olive,25), 1, plot.style_linebr, display = display.pane+display.data_window)
+
