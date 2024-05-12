@@ -1,0 +1,9 @@
+//@version=5
+indicator("pivot_test", overlay = true)
+
+lowest3 = ta.lowest(3)
+blfractal2 = lowest3 == low // aggressive lpivot2
+lpivot2 = ta.pivotlow(low,2,2)
+
+plotshape(blfractal2, "l3", shape.xcross, location.belowbar, color.new(color.gray,25), size=size.tiny, display=display.pane)
+plotshape(lpivot2, "lfr", shape.diamond, location.belowbar, color.new(color.blue,0), size=size.tiny, display=display.pane, offset=-2)
