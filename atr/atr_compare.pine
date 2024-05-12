@@ -1,0 +1,59 @@
+//@version=5
+indicator("atr_compare")
+
+// TODO: measure ATR pivot-pivot
+
+daylength() =>
+    switch
+        timeframe.in_seconds() <= 5*60 => math.ceil(2*24*60*60 / timeframe.in_seconds())  // 5min - 2days
+        timeframe.in_seconds() <= 2*60*60 => math.ceil(5*24*60*60 / timeframe.in_seconds())  // 2hrs - 5days
+        timeframe.in_seconds() <= 1*24*60*60 => math.ceil(365*24*60*60/2 / timeframe.in_seconds())  // 1day - 180days
+        timeframe.in_seconds() <= 7*24*60*60 => math.ceil(365*24*60*60/1.5 / timeframe.in_seconds())  // 7day - 243days
+        timeframe.in_seconds() <= 31*24*60*60 => math.ceil(365*24*60*60 / timeframe.in_seconds())  // 31day - 365days
+        => bar_index + 1  // all
+
+atr1() => ta.atr(14)
+atr1p() => ta.atr(14) / close * 100
+
+cur_atr1p = atr1p()
+// MAX 40 calls to request.*()
+sber_atr1p = request.security("MOEX:SBER", timeframe.period, atr1p())
+afks_atr1p = request.security("MOEX:AFKS", timeframe.period, atr1p())
+rosn_atr1p = request.security("MOEX:ROSN", timeframe.period, atr1p())
+lkoh_atr1p = request.security("MOEX:LKOH", timeframe.period, atr1p())
+mgnt_atr1p = request.security("MOEX:MGNT", timeframe.period, atr1p())
+nlmk_atr1p = request.security("MOEX:NLMK", timeframe.period, atr1p())
+chmf_atr1p = request.security("MOEX:CHMF", timeframe.period, atr1p())
+plzl_atr1p = request.security("MOEX:PLZL", timeframe.period, atr1p())
+ugld_atr1p = request.security("MOEX:UGLD", timeframe.period, atr1p())
+gltr_atr1p = request.security("MOEX:GLTR", timeframe.period, atr1p())
+belu_atr1p = request.security("MOEX:BELU", timeframe.period, atr1p())
+ozon_atr1p = request.security("MOEX:OZON", timeframe.period, atr1p())
+yndx_atr1p = request.security("MOEX:YNDX", timeframe.period, atr1p())
+posi_atr1p = request.security("MOEX:POSI", timeframe.period, atr1p())
+tcsg_atr1p = request.security("MOEX:TCSG", timeframe.period, atr1p())
+mtlr_atr1p = request.security("MOEX:MTLR", timeframe.period, atr1p())
+mtlrp_atr1p = request.security("MOEX:MTLRP", timeframe.period, atr1p())
+trmk_atr1p = request.security("MOEX:TRMK", timeframe.period, atr1p())
+smlt_atr1p = request.security("MOEX:SMLT", timeframe.period, atr1p())
+
+var lvl = 2.5
+plot(mtlr_atr1p, "mtlr", color.new(color.blue,mtlr_atr1p>=lvl?0:75), 2, display=display.all)
+plot(mtlrp_atr1p, "mtlrp", color.new(color.blue,mtlrp_atr1p>=lvl?0:75), 2, display=display.all)
+plot(sber_atr1p, "sber", color.new(color.green,sber_atr1p>=lvl?0:75), display=display.all)
+plot(lkoh_atr1p, "lkoh", color.new(color.yellow,lkoh_atr1p>=lvl?0:75), display=display.all)
+plot(rosn_atr1p, "rosn", color.new(color.yellow,rosn_atr1p>=lvl?0:75), display=display.all)
+plot(tcsg_atr1p, "tcsg", color.new(#b2ad67,tcsg_atr1p>=lvl?0:75), display=display.all)
+plot(afks_atr1p, "afks", color.new(#db008a,afks_atr1p>=lvl?0:75), 2, display=display.all)
+plot(plzl_atr1p, "plzl", color.new(#c8c800,plzl_atr1p>=lvl?0:75), display=display.all)
+plot(ugld_atr1p, "ugld", color.new(#c8c800,ugld_atr1p>=lvl?0:75), 2, display=display.all)
+plot(belu_atr1p, "belu", color.new(#00a6cf,belu_atr1p>=lvl?0:75), display=display.all)
+plot(mgnt_atr1p, "mgnt", color.new(#ff0000,mgnt_atr1p>=lvl?0:75), display=display.all)
+plot(nlmk_atr1p, "nlmk", color.new(#b45700,nlmk_atr1p>=lvl?0:75), display=display.all)
+plot(chmf_atr1p, "chmf", color.new(#b45700,chmf_atr1p>=lvl?0:75), display=display.all)
+plot(trmk_atr1p, "trmk", color.new(#b45700,trmk_atr1p>=lvl?0:75), display=display.all)
+plot(ozon_atr1p, "ozon", color.new(#00a6ff,ozon_atr1p>=lvl?0:75), 2, display=display.all)
+plot(yndx_atr1p, "yndx", color.new(#ffac2f,yndx_atr1p>=lvl?0:75), 2, display=display.all)
+plot(posi_atr1p, "posi", color.new(#ff00d0,posi_atr1p>=lvl?0:75), 2, display=display.all)
+plot(gltr_atr1p, "gltr", color.new(#c8c8c8,gltr_atr1p>=lvl?0:75), 2, display=display.all)
+plot(smlt_atr1p, "smlt", color.new(#c8c8c8,smlt_atr1p>=lvl?0:75), display=display.all)
