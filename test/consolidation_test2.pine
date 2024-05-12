@@ -1,0 +1,81 @@
+//@version=5
+indicator("consolidation_test2", overlay = true, max_lines_count = 500)
+
+var int day2length = math.ceil(2*24*60*60 / timeframe.in_seconds())
+var int day5length = math.ceil(5*24*60*60 / timeframe.in_seconds())
+var int daylength = switch
+    timeframe.in_seconds() <= 5*60 => day2length
+    timeframe.in_seconds() <= 24*60*60 => day5length
+    timeframe.in_seconds() <= 7*24*60*60 => math.ceil(30*24*60*60 / timeframe.in_seconds())
+    timeframe.in_seconds() <= 31*24*60*60 => math.ceil(365*24*60*60 / 4 / timeframe.in_seconds())
+    => math.ceil(365*24*60*60 / timeframe.in_seconds())
+
+prevatr = ta.atr(1)[1]
+atr50d = ta.median(prevatr, daylength)
+atrrange4 = atr50d / 4
+atrrange8 = atr50d / 8
+
+plot(low+atrrange4/2, "lr", color.new(color.blue,75), 1, plot.style_stepline, display=display.pane+display.data_window)
+plot(low-atrrange4/2, "lr", color.new(color.blue,75), 1, plot.style_stepline, display=display.pane+display.data_window)
+plot(high+atrrange4/2, "hr", color.new(color.blue,75), 1, plot.style_stepline, display=display.pane+display.data_window)
+plot(high-atrrange4/2, "hr", color.new(color.blue,75), 1, plot.style_stepline, display=display.pane+display.data_window)
+
+const int fractal = 3
+frl = ta.pivotlow(low,fractal,fractal)
+frh = ta.pivothigh(high,fractal,fractal)
+plot(frl,style=plot.style_cross,linewidth=2,offset=-fractal)
+plot(frh,style=plot.style_cross,linewidth=2,offset=-fractal)
+
+
+bodyhigh = math.max(open,close)
+bodylow = math.min(open,close)
+
+cl1 = math.abs(low[1]-low)<=atrrange4
+cl2 = math.abs(bodylow[1]-bodylow)<=atrrange8
+cl = cl1 or cl2
+ch1 = math.abs(high[1]-high)<=atrrange4
+ch2 = math.abs(bodyhigh[1]-bodyhigh)<=atrrange8
+ch = ch1 or ch2
+
+//plotchar(cl,"cl","*",location.belowbar,color.new(color.blue,75))
+//plotchar(ch,"ch","*",location.abovebar,color.new(color.blue,75))
+
+pl1 = plot((cl1?low:na)+atrrange4/2, "lr1", color.new(color.blue,95), 1, plot.style_steplinebr, display=display.none)
+pl2 = plot((cl1?low:na)-atrrange4/2, "lr2", color.new(color.blue,95), 1, plot.style_steplinebr, display=display.none)
+fill(pl1,pl2,color.new(color.green,75))
+plb1 = plot((cl2?bodylow:na)+atrrange8/2, "lbr1", color.new(color.blue,95), 1, plot.style_steplinebr, display=display.none)
+plb2 = plot((cl2?bodylow:na)-atrrange8/2, "lbr2", color.new(color.blue,95), 1, plot.style_steplinebr, display=display.none)
+fill(plb1,plb2,color.new(color.green,50))
+
+ph1 = plot((ch1?high:na)+atrrange4/2, "hr1", color.new(color.blue,95), 1, plot.style_stepline, display=display.none)
+ph2 = plot((ch1?high:na)-atrrange4/2, "hr2", color.new(color.blue,95), 1, plot.style_stepline, display=display.none)
+fill(ph1,ph2,color.new(color.red,75))
+phb1 = plot((ch2?bodyhigh:na)+atrrange8/2, "hbr1", color.new(color.blue,95), 1, plot.style_stepline, display=display.none)
+phb2 = plot((ch2?bodyhigh:na)-atrrange8/2, "hbr2", color.new(color.blue,95), 1, plot.style_stepline, display=display.none)
+fill(phb1,phb2,color.new(color.red,50))
+
+
+debugLines() =>
+    var line lineh1 = na
+    var line lineh2 = na
+    var line linel1 = na
+    var line linel2 = na
+    //var int prev_bar = na
+    if ta.change(cl)
+        if cl
+            linel1 := line.new(bar_index[1],low[1],bar_index[1],low[1],color=color.new(color.blue,0))
+            linel2 := line.new(bar_index[1],bodylow[1],bar_index[1],bodylow[1],color=color.new(color.gray,0))
+        else
+            line.set_x2(linel1, bar_index[1])
+            line.set_x2(linel2, bar_index[1])
+            linefill.new(linel1,linel2,color.new(color.green,75))
+    if ta.change(ch)
+        if ch
+            lineh1 := line.new(bar_index[1],high[1],bar_index[1],high[1],color=color.new(color.blue,0))
+            lineh2 := line.new(bar_index[1],bodyhigh[1],bar_index[1],bodyhigh[1],color=color.new(color.gray,0))
+        else
+            line.set_x2(lineh1, bar_index[1])
+            line.set_x2(lineh2, bar_index[1])
+            linefill.new(lineh1,lineh2,color.new(color.red,75))
+    0 // prevent return error
+// debugLines()
