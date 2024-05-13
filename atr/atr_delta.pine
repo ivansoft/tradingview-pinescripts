@@ -1,0 +1,41 @@
+//@version=5
+indicator("art_delta", overlay = true)
+
+var i_atrhl = input.int(4, "ATR HL")
+var i_atrbhl = input.int(8, "ATR Body HL")
+var i_highlow = input.bool(false, "Display HL") ? display.pane+display.data_window : display.none
+var i_bodyhighlow = input.bool(true, "Display Body HL") ? display.pane+display.data_window : display.none
+
+var int daylength = switch
+    timeframe.in_seconds() <= 5*60 => math.ceil(2*24*60*60 / timeframe.in_seconds())  // 5min - 2days
+    timeframe.in_seconds() <= 2*60*60 => math.ceil(5*24*60*60 / timeframe.in_seconds())  // 2hrs - 5days
+    timeframe.in_seconds() <= 1*24*60*60 => math.ceil(365*24*60*60/2 / timeframe.in_seconds())  // 1day - 180days
+    timeframe.in_seconds() <= 7*24*60*60 => math.ceil(365*24*60*60/1.5 / timeframe.in_seconds())  // 7day - 243days
+    timeframe.in_seconds() <= 31*24*60*60 => math.ceil(365*24*60*60 / timeframe.in_seconds())  // 31day - 365days
+    => bar_index + 1  // all
+
+bodyhigh = math.max(open,close)
+bodylow = math.min(open,close)
+
+pine_atr1() => na(high[1])? high-low : 
+     math.max(math.max(high-low, math.abs(high-close[1])), math.abs(low-close[1]))
+pine_atrbody1() => na(bodyhigh[1])? bodyhigh-bodylow : 
+     math.max(math.max(bodyhigh-bodylow, math.abs(bodyhigh-close[1])), math.abs(bodylow-close[1]))
+
+
+prevatr = ta.atr(1)[1]
+prevatrbody = pine_atrbody1()[1]
+//atr50d = ta.median(prevatr, daylength)
+atr50d = ta.median(prevatrbody, daylength)
+atrrange4 = atr50d / i_atrhl
+atrrange8 = atr50d / i_atrbhl
+
+plot(high+atrrange4/2, "hr1", color.new(color.blue,75), 1, plot.style_stepline, display=i_highlow)
+plot(high-atrrange4/2, "hr2", color.new(color.blue,75), 1, plot.style_stepline, display=i_highlow)
+plot(low+atrrange4/2, "lr2", color.new(color.blue,75), 1, plot.style_stepline, display=i_highlow)
+plot(low-atrrange4/2, "lr1", color.new(color.blue,75), 1, plot.style_stepline, display=i_highlow)
+
+plot(bodyhigh+atrrange8/2, "bhr1", color.new(color.blue,75), 1, plot.style_stepline, display=i_bodyhighlow)
+plot(bodyhigh-atrrange8/2, "bhr2", color.new(color.blue,75), 1, plot.style_stepline, display=i_bodyhighlow)
+plot(bodylow+atrrange8/2, "blr2", color.new(color.blue,75), 1, plot.style_stepline, display=i_bodyhighlow)
+plot(bodylow-atrrange8/2, "blr1", color.new(color.blue,75), 1, plot.style_stepline, display=i_bodyhighlow)
