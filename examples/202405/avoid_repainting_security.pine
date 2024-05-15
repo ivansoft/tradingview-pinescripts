@@ -1,0 +1,171 @@
+﻿//@version=4
+//@author=LucF for PineCoders
+
+// How to avoid repainting when using security() - PineCoders FAQ
+//  v1.4, 2020.04.06 20:28 — LucF
+
+// PineCoders, Tools and ideas for all Pine coders: pinecoders.com
+
+// This script shows different uses of the "security() function using current and previous series value, and all permutations of "gaps=" and "lookahead=" parameters.
+// It  shows a warning if the chart is not on a lower timeframe than the one used in the "security()" call.
+// Two functions are presented to help coders use security securely:
+//      • `f_secureSecurity()` is the worry-free function that never repaints, be it on historical or the realtime bar, and doesn't suffer from lookahead bias.
+//      • `f_security()` is for coders who want to offer their users a repainting/no-repainting version of the HTF data. It uses only one `security()` call for both.
+
+// Code adapted from original by @pinetech at https://www.tradingview.com/script/DF3ivfux-Repainting-Yes-No/ and in v4 documentation.
+// For a discussion of "security() and its parameters, see: https://www.tradingview.com/pine-script-docs/en/v4/essential/Context_switching_the_security_function.html
+
+// PineCoders FAQ & Code question linking here: http://www.pinecoders.com/faq_and_code/#how-to-avoid-repainting-when-using-the-security-function
+// This indicator's TradingView page: https://www.tradingview.com/script/cyPWY96u-How-to-avoid-repainting-when-using-security-PineCoders-FAQ/
+
+study("How to avoid repainting when using security() - PineCoders FAQ", overlay = true)
+
+// —————————— Inputs
+SH1 = "All", SH2 = "Essentials only", SH3 = "Permutations only"
+show        = input(SH1, "Show", options = [SH1, SH2, SH3])
+labelsOn    = input(true, "Plot Labels")
+// ————— Higher TF we will be fetching data from.
+higherTf    = input("5", "Higher timeframe used for security() calls", type = input.resolution)
+// ————— Source we will be fetching from higher TF.
+data        = input(close, "Source used in security() calls")
+
+// —————————— Functions
+// ————— Places a label on a line.
+f_lineLabel(_line, _barsBack, _color, _text) =>
+    var label _lbl = na
+    if barstate.islast
+        if na(_lbl)
+            // Only create label once.
+            _lbl := label.new(bar_index[_barsBack], _line[_barsBack], xloc = xloc.bar_index, yloc = yloc.price, text = _text +"\n" + tostring(_line[_barsBack]), color = _color, textcolor = #FFFFFFff)
+            // Fudge return type of `if` block so compiler doesn't complain (thx midtownsk8rguy for the trick).
+            int(na)
+        else
+            // Rather than delete and recreate the label on every realtime bar update, update the label's information; it's more efficient.
+            label.set_xy(_lbl, bar_index[_barsBack], _line[_barsBack])
+            label.set_text(_lbl, _text)
+            label.set_color(_lbl, _color)
+            int(na)
+// ————— Converts current chart resolution into a float minutes value.
+f_resInMinutes() => 
+    _resInMinutes = timeframe.multiplier * (
+      timeframe.isseconds ? 1. / 60             :
+      timeframe.isminutes ? 1.                  :
+      timeframe.isdaily   ? 60. * 24            :
+      timeframe.isweekly  ? 60. * 24 * 7        :
+      timeframe.ismonthly ? 60. * 24 * 30.4375  : na)
+// ————— Returns the float minutes value of the string _res.
+f_tfResInMinutes(_res) =>
+    // _res: resolution of any TF (in "timeframe.period" string format).
+    // Dependency: f_resInMinutes().
+    security(syminfo.tickerid, _res, f_resInMinutes())
+
+// —————————— Determine if current timeframe is smaller that higher timeframe selected in Inputs.
+// Get higher timeframe in minutes.
+higherTfInMinutes = f_tfResInMinutes(higherTf)
+// Get current timeframe in minutes.
+currentTfInMinutes = f_resInMinutes()
+// Compare current TF to higher TF to make sure it is smaller, otherwise our plots don't make sense.
+chartOnLowerTf = currentTfInMinutes < higherTfInMinutes
+
+// —————————— Show all combos of security() calls if we are on a proper lower TF than the one used for the security calls.
+// #1
+sec01 = security(syminfo.tickerid, higherTf, data, gaps = barmerge.gaps_off,  lookahead = barmerge.lookahead_off)
+plot(chartOnLowerTf and show != SH2 ? sec01 : na, "▼#1 data",  color.purple, 5, transp = 60)
+
+// #2
+sec02 = security(syminfo.tickerid, higherTf, data, gaps = barmerge.gaps_off,  lookahead = barmerge.lookahead_on)
+plot(chartOnLowerTf and show != SH2 ? sec02 : na, "▼#2 data, lookahead on", color.blue)
+
+// #3
+sec03 = security(syminfo.tickerid, higherTf, data, gaps = barmerge.gaps_on,   lookahead = barmerge.lookahead_off)
+plot(chartOnLowerTf and show != SH2 ? sec03 : na, "▼#3 data, gaps on", color.purple, 8, plot.style_linebr)
+
+// #4
+sec04 = security(syminfo.tickerid, higherTf, data, gaps = barmerge.gaps_on,   lookahead = barmerge.lookahead_on)
+plot(chartOnLowerTf and show != SH2 ? sec04 : na, "▼#4 data, gaps on, lookahead on", color.blue, 8, plot.style_linebr)
+
+// #5
+sec05 = security(syminfo.tickerid, higherTf, data[1], gaps = barmerge.gaps_off,  lookahead = barmerge.lookahead_off)
+plot(chartOnLowerTf and show != SH2 ? sec05 : na, "▼#5 data[1]", color.red)
+
+// #6
+sec06 = security(syminfo.tickerid, higherTf, data[1], gaps = barmerge.gaps_off,  lookahead = barmerge.lookahead_on)
+plot(chartOnLowerTf and show != SH2 ? sec06 : na, "▲#6 data[1], lookahead on (⭐GOOD⭐)", color.orange, 20, transp = 70)
+
+// #7
+sec07 = security(syminfo.tickerid, higherTf, data[1], gaps = barmerge.gaps_on,   lookahead = barmerge.lookahead_off)
+plot(chartOnLowerTf and show != SH2 ? sec07 : na, "▼#7 data[1], gaps on", color.red, 8, plot.style_linebr, transp = 0)
+
+// #8
+sec08 = security(syminfo.tickerid, higherTf, data[1], gaps = barmerge.gaps_on,   lookahead = barmerge.lookahead_on)
+plot(chartOnLowerTf and show != SH2 ? sec08 : na, "▼#8 data[1], gaps on, lookahead on (OK but gaps)", color.orange, 24, plot.style_linebr, transp = 40)
+
+// —————————— 
+// Conclusion so far: #6 is the best way to avoid repainting.
+//      v4: security(syminfo.tickerid, tf, close[1], lookahead=barmerge.lookahead_on)
+//      v3: security(tickerid, tf, close[1], lookahead=barmerge.lookahead_on)
+//          [No need to specify gaps off as it's the default.]
+// Example: https://www.tradingview.com/pine-script-docs/en/v4/essential/Drawings.html#pivot-points-standard
+// —————————————————————————————————————————————————————————————————————————————————————————————————————————
+
+// #9
+// —————————— Alternate but more complex way of avoiding repainting using barmerge.lookahead_off.
+// It is also possible to avoid repainting using "lookahead_off" (the default in v3 and v4), but we then need to include logic 
+//   to use different "security()" calls for historical and real-time bars, so it's more complicated:
+//      1. for the REALTIME bar we use:  security(syminfo.tickerid, higherTf, data[1])
+//      2. for HISTORICAL bars we use:   security(syminfo.tickerid, higherTf, data)[1]
+// This is the silver line following the thick orange line.
+indexHighTf = barstate.isrealtime ? 1 : 0
+indexCurrTf = barstate.isrealtime ? 0 : 1
+sec09 = security(syminfo.tickerid, higherTf, data[indexHighTf])[indexCurrTf]
+plot(chartOnLowerTf and show != SH2 ? sec09 : na, "▲#9 data[indexHighTf] (Good but mroe complex)", color.silver, 8)
+
+// ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼
+// ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼
+// Function to securely and simply call `security()` so that it never repaints and never looks ahead.
+f_secureSecurity(_symbol, _res, _src) => security(_symbol, _res, _src[1], lookahead = barmerge.lookahead_on)
+// #10
+sec10 = f_secureSecurity(syminfo.tickerid, higherTf, data)
+plot(chartOnLowerTf and show != SH3 ? sec10 : na, "▲#10 f_secureSecurity() (⭐⭐BEST⭐⭐)", color.black, 4)
+// ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+// ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+
+// ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼
+// Function for coders who want to offer their users a repainting/no-repainting version of the HTF data.
+// It has the advantage of using only one `security()` call for both.
+f_security(_symbol, _res, _src, _repaint) => security(_symbol, _res, _src[_repaint ? 0 : barstate.isrealtime ? 1 : 0])[_repaint ? 0 : barstate.isrealtime ? 0 : 1]
+// #11
+// Explicit request for non-repainting version.
+sec11 = f_security(syminfo.tickerid, higherTf, data, false)
+plot(chartOnLowerTf and show != SH3 ? sec11 : na, "▲#11 f_security() no repaint", color.white, 2)
+// #12
+// Explicit request for repainting version.
+sec12   = f_security(syminfo.tickerid, higherTf, data, true)
+plot(chartOnLowerTf and show != SH3 ? sec12 : na, "▲#12 f_security() repaint", color.olive, 6, transp = 60)
+// ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+
+
+// —————————— Plot labels on a selection of lines.
+if chartOnLowerTf and labelsOn
+    if show != SH2 
+        f_lineLabel(sec01,  1, color.purple, "▼#1 Repaints\n══════\ndata\ngaps OFF\nlookahead OFF")
+        f_lineLabel(sec02,  4, color.blue,   "▼#2 Lookahead Bias\n══════\ndata\ngaps OFF\nlookahead ON")
+        f_lineLabel(sec05,  7, color.red,    "▼#5 Late info\n══════\ndata[1]\ngaps OFF\nlookahead OFF")
+        f_lineLabel(sec06, 14, color.orange, "▲#6 BETTER\n══════\ndata[1]\ngaps OFF\nlookahead ON")
+        f_lineLabel(sec09, 17, color.silver, "▲#9 GOOD but complex\n══════\ndata[indexCurrTf]\ngaps OFF\nlookahead OFF")
+    if show != SH3
+        f_lineLabel(sec10, 11, color.black,   "⭐——▲#10 BEST——⭐\n⭐——SIMPLEST——⭐\n══════\n\nf_secureSecurity()")
+
+// —————————— Show warning if chart's TF >= higher TF.
+// ————— Make background red.
+bgcolor(not chartOnLowerTf ? color.new(color.red,85) : na)
+// ————— Show warning label at right of chart.
+if not chartOnLowerTf
+    f_lineLabel(close,  1, color.red, "Use on lower\ninterval than " + higherTf + (higherTfInMinutes < 1440 ? " min" : ""))
+
+
+// —————————————————————————————————————————————————————————————————————————————————————————————————————————
+// —————————————————————————————————————————————————————————————————————————————————————————————————————————
+// The 2 functions presented in this script.
+// f_secureSecurity(_symbol, _res, _src) => security(_symbol, _res, _src[1], lookahead = barmerge.lookahead_on)
+// f_security(_symbol, _res, _src, _repaint) => security(_symbol, _res, _src[_repaint ? 0 : barstate.isrealtime ? 1 : 0])[_repaint ? 0 : barstate.isrealtime ? 0 : 1]

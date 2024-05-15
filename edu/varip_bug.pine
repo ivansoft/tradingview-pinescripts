@@ -1,0 +1,56 @@
+//@version=5
+indicator("test", overlay = true)
+
+const array<string> periods = array.from("5", "10", "D", "W", "M", "12M")
+
+type ChartPoint
+    varip float price
+    varip int time
+    varip int index
+type Context
+    varip chart.point cursor
+type Context_fix
+    ChartPoint cursor
+
+method process(Context ctx, bool triggered) =>
+    if barstate.islastconfirmedhistory
+        label.new(bar_index, na, "last\n\n", yloc = yloc.abovebar, style = label.style_none, textcolor = color.black, size = size.small)
+    if barstate.isnew
+        if triggered
+            label.new(bar_index, na, "↻\n", yloc = yloc.abovebar, style = label.style_none, textcolor = color.black, size = size.small)
+            ctx.cursor.time := time
+            ctx.cursor.index := bar_index
+            ctx.cursor.price := high
+    ctx.cursor.price := math.max(nz(ctx.cursor.price, high), high)
+    changed = ta.change(ctx.cursor.price) != 0
+    if changed
+        ctx.cursor.time := time
+        ctx.cursor.index := bar_index
+        label.new(bar_index, na, str.format("{0,time,HH:mm}", ctx.cursor.time), yloc = yloc.abovebar, style = label.style_none, textcolor = color.black, size = size.small)
+
+method process(Context_fix ctx, bool triggered) =>
+    if barstate.islastconfirmedhistory
+        label.new(bar_index, na, "\n\nlast", yloc = yloc.belowbar, style = label.style_none, textcolor = color.black, size = size.small)
+    if barstate.isnew
+        if triggered
+            label.new(bar_index, na, "\n↻", yloc = yloc.belowbar, style = label.style_none, textcolor = color.black, size = size.small)
+            ctx.cursor.time := time
+            ctx.cursor.index := bar_index
+            ctx.cursor.price := high
+    ctx.cursor.price := math.max(nz(ctx.cursor.price, high), high)
+    changed = ta.change(ctx.cursor.price) != 0
+    if changed
+        ctx.cursor.time := time
+        ctx.cursor.index := bar_index
+        label.new(bar_index, na, str.format("{0,time,HH:mm}", ctx.cursor.time), yloc = yloc.belowbar, style = label.style_none, textcolor = color.black, size = size.small)
+    
+
+var map<string, Context> data1 = map.new<string, Context>()
+var map<string, Context_fix> data2 = map.new<string, Context_fix>()
+if bar_index == 0
+    for key in periods
+        data1.put(key, Context.new(chart.point.new(na, na, na)))
+        data2.put(key, Context_fix.new(ChartPoint.new(na, na, na)))
+
+data1.get("5").process(ta.change(time("5")) > 0)
+data2.get("5").process(ta.change(time("5")) > 0)

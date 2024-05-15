@@ -1,0 +1,67 @@
+//@version=4
+//@author=LucF, for PineCoders
+
+// How to avoid repainting when NOT using security() - PineCoders FAQ
+//  v1.3, 2019.09.24 18:18 — LucF
+
+// PineCoders, Tools and ideas for all Pine coders: pinecoders.com
+
+// This script shows three methods to avoid repainting when not using the "security()" function.
+
+// PineCoders FAQ & Code question linking here: http://www.pinecoders.com/faq_and_code/#how-to-avoid-repainting-when-not-using-the-security-function
+// This indicator's TradingView page: https://www.tradingview.com/script/s8kWs84i-How-to-avoid-repainting-when-NOT-using-security/
+
+study("How to avoid repainting when NOT using security() - PineCoders FAQ", "", true)
+
+fastLength = input(10, "Fast Length")
+slowLength = input(3, "Slow Length")
+
+// —————————— Method 1 (GOOD with "Once Per Bar Close" alerts only)
+// GRAY LINES: Repainting
+// GRAY MARKERS: Repainting
+// ALERT: Non-repainting if "Once Per Bar Close" is used.
+M1 = input(true, "Show Method 1 (gray): On close (Repainting)")
+ma1_f = sma(close, fastLength)
+ma1_s = sma(close, slowLength)
+c1 = cross(ma1_f, ma1_s)
+plot(M1 ? ma1_f : na, "MA1 Fast", color.gray, 1, transp = 0)
+plot(M1 ? ma1_s : na, "MA1 Slow", color.gray, 3, transp = 0)
+plotshape(M1 and c1, "Method 1 Marker", shape.circle, location.top, color.gray, text = "1\nRepainting", size = size.tiny)
+plotshape(M1 and c1 ? ma1_s : na, "Method 1 Dot", shape.circle, location.absolute, color.gray, size = size.tiny)
+alertcondition(c1, "Method 1: cross", "Method 1: cross")
+
+// —————————— Method 2 (GOOD with "Once Per Bar" alerts)
+// GREEN LINES: Repainting (but can be hidden)
+// GREEN MARKERS: Non-Repainting
+// ALERT: Non-Repainting, even when used with "Once Per Bar". "Once Per Bar" should be used, since alert appears at the beginning of the realtime bar.
+M2 = input(true, "Show Method 2 (green): On close but crossover[1] (Non Repainting)")
+// This setting allows hiding the repainting lines in the realtime bar. Note that because "barstate.realtime"
+// only becomes true after first price update in the realtime bar, the lines will show until then.
+M2NR = input(true, "...Allow Method 2 repainting lines to show in realtime")
+ma2_f = sma(close, fastLength)
+ma2_s = sma(close, slowLength)
+c2 = cross(ma2_f, ma2_s)[1]
+// ————— Method 2b
+// Delayed non-repainting MAs and non-repainting alert. The delayed MAs are not optimal.
+// ma2_f = sma(close[1], fastLength)
+// ma2_s = sma(close[1], slowLength)
+// c2 = cross(ma2_f, ma2_s)
+plot(M2 and (M2NR or not barstate.isrealtime) ? ma2_f : na, "MA1 Fast", color.green, 7, transp = 75)
+plot(M2 and (M2NR or not barstate.isrealtime) ? ma2_s : na, "MA1 Slow", color.lime, 10, transp = 75)
+plotshape(M2 and c2, "Method 2 Marker", shape.cross, location.top, color.lime, text = "2\nNot\nRepainting", size = size.normal)
+plotshape(M2 and c2 ? ma2_s : na, "Method 2 Dot", shape.circle, location.absolute, color.lime, size = size.tiny)
+alertcondition(c2, "Method 2: cross", "Method 2: cross")
+
+// —————————— Method 3 (NOT RECOMMENDED IN THIS CASE, but could be useful in special cases)
+// ORANGE LINES: Non-Repainting BUT the MAs using "open" rather than "close" are not ideal.
+// ORANGE MARKERS: Non-Repainting
+// ALERT: Non-Repainting, even when used with "Once Per Bar".
+M3 = input(true, "Show Method 3 (orange): On open (Non-Repainting but problematic)")
+ma3_f = sma(open, fastLength)
+ma3_s = sma(open, slowLength)
+c3 = cross(ma3_f, ma3_s)
+plot(M3 ? ma3_f : na, "MA1 Fast", color.orange)
+plot(M3 ? ma3_s : na, "MA1 Slow", color.orange, 2)
+plotshape(M3 and c3, "Method 3 Marker", shape.diamond, location.top, color.orange, text = "3\nNot\nRepainting", size = size.small)
+plotshape(M3 and c3 ? ma3_s : na, "Method 3 Dot", shape.circle, location.absolute, color.orange, size = size.tiny)
+alertcondition(c3, "Method 3: cross", "Method 3: cross")

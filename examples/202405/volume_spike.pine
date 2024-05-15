@@ -1,0 +1,168 @@
+// This work is licensed under Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License (CC BY-NC-SA 4.0) https://creativecommons.org/licenses/by-nc-sa/4.0/
+// © Trendoscope
+
+// https://www.tradingview.com/script/ZaliXFLV-Volume-Spike-Analysis-Trendoscope/
+// - the traditional method of comparing volume to its moving average is not quite accurate
+// 
+// 1. Historical Volume Comparison
+//    - indicator first assesses the current bar's volume, say 100k
+//    - looks back historically to determine the last instance when the volume was equal to or exceeded this level
+// 2. High Volume Bar Gap Calculation
+//    - intervals or gaps between high volume bars are recorded
+//    - these gaps help in determining how common or rare a particular volume spike is
+// 3. Spike Magnitude Determination
+//    - extent of the volume spike is gauged in relation to either the median, lowest, or average volume of the intervening bars
+//    - reference metric (median, lowest, or average) can be chosen by the user
+// 4. Spike Percentile Analysis
+//    - calculated spike magnitude (as a percentage of the reference volume) is cataloged
+//    - collection aids in understanding the relative intensity of the current volume spike when compared to previous spikes
+// 5. Threshold Comparisons
+//    - indicator then compares
+//        the calculated "High Volume Distance Percentile" to the "Last High Volume Distance Percentile"
+//         and
+//        the "Volume Spike Percentile" to the "Volume Spike Threshold"
+//    - if these values surpass the preset thresholds, the current bar is flagged as a high volume or volume spike bar
+// 
+
+//@version=5
+indicator("Volume Spike Analysis [Trendoscope]", max_lines_count = 500, overlay = false, format = format.volume)
+
+import HeWhoMustNotBeNamed/BinaryInsertionSort/1 as bis
+highVolumeDistanceThreshold = input.int(90, 'Last High Volume Distance Percentile', 5, 100, 5, 'Minimum percentile of last high volume distance to be considered for highlighting', display = display.none)
+volumeSpikeReference = input.string('median', 'Volume Spike Reference', ['median', 'average', 'lowest'], 'Method to calculate the measure of volume spike', display = display.none)
+volumeSpikeThreshold = input.int(85, 'Volume Spike Threshold', 5, 100, 5, 'Minimum Volume Spike threshold to be considered for highlighting', display = display.none)
+
+lastHighDistance(float source)=>
+    var sourceArray = array.new<float>()
+    sourceArray.push(source)
+
+    var lastHighIndex = 0
+
+    currentLastHighIndex = source < nz(source[1], source)? sourceArray.size()-2 : lastHighIndex
+    while (source > sourceArray.get(currentLastHighIndex) and currentLastHighIndex !=0)
+        currentLastHighIndex-=1
+
+    lastHighIndex := currentLastHighIndex == 0? sourceArray.size()-1 : currentLastHighIndex
+    lastHighDistance = sourceArray.size()-lastHighIndex-1
+
+    [valueArray, sortedArray, sortIndex] = bis.get_array_of_series(lastHighDistance)
+    lastDistancePercentile = math.round(sortIndex*100/valueArray.size(), 2)
+
+    [lastHighIndex, sourceArray, lastHighDistance, lastDistancePercentile]
+
+type LineProperties
+    string xloc = xloc.bar_index
+    string extend = extend.none
+    color color = chart.fg_color
+    string style = line.style_arrow_right
+    int width = 1
+
+type LabelProperties
+    float positionRatio = 0.5
+    string xloc = xloc.bar_index
+    string yloc = yloc.price
+    color color = color.blue
+    string style = label.style_none
+    color textcolor = chart.fg_color
+    string size = size.normal
+    string textalign = text.align_center
+    string text_font_family = font.family_default
+
+type LabelledLine
+    line ln
+    label lbl
+
+method flush(array<LabelledLine> this)=>
+    while this.size() > 0
+        l = this.pop()
+        l.ln.delete()
+        l.lbl.delete()
+
+method getLabelPosition(LabelProperties this, chart.point first, chart.point other)=>
+    chart.point.new(
+         first.time + int(math.abs(first.time-other.time)*this.positionRatio), 
+         first.index + int(math.abs(first.index - other.index)*this.positionRatio), 
+         first.price + math.abs(first.price-other.price)*this.positionRatio
+         )
+
+method add(array<LabelledLine> this, chart.point start, chart.point end, string lableText, string tooltip = na, LineProperties lineProps = na, LabelProperties labelProps = na)=>
+    lp = na(lineProps)? LineProperties.new() : lineProps
+    lap = na(labelProps)? LabelProperties.new() : labelProps
+    this.push(LabelledLine.new(
+         line.new(start, end, lp.xloc, lp.extend, lp.color, lp.style, lp.width),
+         label.new(lap.getLabelPosition(start, end), lableText, lap.xloc, lap.yloc, lap.color, lap.style, lap.textcolor, lap.size, lap.textalign, tooltip, lap.text_font_family)
+     ))
+
+[lastHighIndex, sourceArray, volumeLastHighDistance, lastDistancePercentile] = lastHighDistance(volume)
+
+var array<LabelledLine> markers = array.new<LabelledLine>()
+transparency = 90
+if(lastDistancePercentile >= highVolumeDistanceThreshold and lastHighIndex < sourceArray.size()-3)
+    subArray = sourceArray.slice(lastHighIndex+1, sourceArray.size()-1)
+    sortIndicesOfSubArray = subArray.sort_indices(order.ascending)
+
+    lowestVolumeIndex = lastHighIndex + sortIndicesOfSubArray.first() + 1
+    lowestPoint = subArray.min()
+
+    medianPoint = subArray.median()
+    medianIndex = lastHighIndex + sortIndicesOfSubArray.get(sortIndicesOfSubArray.size()/2) + 1
+
+    averagePoint = subArray.avg()
+
+    distanceFromReference = volume - (volumeSpikeReference == 'median'? medianPoint : volumeSpikeReference == 'average'? averagePoint : lowestPoint)
+   
+
+    [valueArray, sortedArray, sortIndex] = bis.get_array_of_series(distanceFromReference/volume)
+    lowToHighVolumeDiffPercentile = math.round(sortIndex*100/valueArray.size())
+
+    highlight = lastDistancePercentile >= highVolumeDistanceThreshold and lowToHighVolumeDiffPercentile >= volumeSpikeThreshold
+
+    transparency := int(highlight? (100-(lastDistancePercentile+lowToHighVolumeDiffPercentile)/2)*0.9: 90)
+
+    var line averageLine = na
+
+    if(highlight)
+        markers.flush()
+        lowestTimes = math.round(volume/lowestPoint, 2)
+        medianTimes = math.round(volume/medianPoint, 2)
+        averageTimes = math.round(volume/averagePoint, 2)
+        labelContent = str.tostring(volumeLastHighDistance)+' Bars ('+str.tostring(lastDistancePercentile)+'th Percentile)\n'+
+                             str.tostring(lowestTimes) + ' times lowest volume\n' +
+                             str.tostring(medianTimes) + ' times median volume\n' +
+                             str.tostring(averageTimes) + ' times average volume'
+        markers.add(
+                 chart.point.from_index(lastHighIndex+1, volume), 
+                 chart.point.from_index(bar_index-1, volume), 
+                 labelContent
+                 )
+
+        markers.add(
+                 chart.point.from_index(lowestVolumeIndex, lowestPoint),
+                 chart.point.from_index(lowestVolumeIndex, volume),
+                 '🟡', 'Lowest Volume '+str.tostring(lowestPoint),
+                 labelProps = LabelProperties.new(0)
+                 )
+
+        markers.add(
+                 chart.point.from_index(medianIndex, medianPoint),
+                 chart.point.from_index(medianIndex, volume),
+                 '🟡', 'Median Volume '+str.tostring(medianPoint),
+                 labelProps = LabelProperties.new(0)
+                 )
+
+        markers.add(
+                 chart.point.from_index(lastHighIndex+1, averagePoint),
+                 chart.point.from_index(bar_index-1, averagePoint),
+                 '▶', 'Average Volume '+str.tostring(averagePoint),
+                 lineProps = LineProperties.new(style = line.style_dotted),
+                 labelProps = LabelProperties.new(0, textcolor = color.yellow)
+                 )
+
+        averageLine.delete()
+        averageLine := line.new(chart.point.from_index(bar_index-1, averagePoint), chart.point.from_index(lastHighIndex+1, averagePoint), style = line.style_dotted)
+
+
+
+barColor = color.new(close > open? color.lime : color.orange, transparency)
+plot(volume, 'Volume', barColor, style = plot.style_columns, display = display.pane)
+

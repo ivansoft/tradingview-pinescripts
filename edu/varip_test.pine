@@ -1,0 +1,163 @@
+//@version=5
+indicator("testnew", overlay = true, max_labels_count = 300)
+
+const int MAX_POINTS_SIZE = 10
+
+const array<string> periodArray = array.from("S", "5", "10", "D", "W", "M", "12M")
+const array<string> periodTextArray = array.from("session", "min", "min", "day", "week", "month", "year")
+
+var lnH = line.new(na, na, na, na, xloc = xloc.bar_index, style=line.style_dashed, width = 1, color = color.new(color.blue, 50))
+var lnL = line.new(na, na, na, na, xloc = xloc.bar_index, style=line.style_dashed, width = 1, color = color.new(color.blue, 50))
+var lnH1 = line.new(na, na, na, na, xloc = xloc.bar_index, style=line.style_dashed, width = 1, color = color.new(color.orange, 60))
+var lnL1 = line.new(na, na, na, na, xloc = xloc.bar_index, style=line.style_dashed, width = 1, color = color.new(color.orange, 60))
+
+type Point
+    varip chart.point high
+    varip chart.point low
+    varip chart.point open
+    varip chart.point close
+chartPoint() => chart.point.new(na,na,na)
+chartPoint(p) => chart.point.now(p)
+createPoint() => Point.new(chartPoint(), chartPoint(), chartPoint(), chartPoint())
+createPointNow() => Point.new(chartPoint(high), chartPoint(low), chartPoint(), chartPoint())
+type PeriodContext1
+    varip Point[] points
+    varip Point curr
+    varip float curr_price_h
+    varip float curr_price_l
+    varip int curr_index_h
+    varip int curr_index_l
+    varip int curr_time_h
+    varip int curr_time_l
+emptyPeriodContext1() => PeriodContext1.new(array.new<Point>(), createPoint(), na, na, na, na)
+method get0O(PeriodContext1 ctx) => ctx.points.size() > 0 ? ctx.points.get(0).open.time : na
+method get0H(PeriodContext1 ctx) => ctx.points.size() > 0 ? na(ctx.points.get(0).high) ? na : ctx.points.get(0).high.time : na
+method get0L(PeriodContext1 ctx) => ctx.points.size() > 0 ? na(ctx.points.get(0).low) ? na : ctx.points.get(0).low.time : na
+method get1O(PeriodContext1 ctx) => ctx.points.size() > 1 ? ctx.points.get(1).open.time : na
+method get1H(PeriodContext1 ctx) => ctx.points.size() > 1 ? ctx.points.get(1).high.time : na
+method get1L(PeriodContext1 ctx) => ctx.points.size() > 1 ? ctx.points.get(1).low.time : na
+type PeriodContext2
+    int[] points
+    int curr
+emptyPeriodContext2() => PeriodContext2.new(array.new<int>(), na)
+method get0(PeriodContext2 ctx) => ctx.points.size() > 0 ? ctx.points.get(0) : na
+
+method process(PeriodContext1 ctx, series bool periodChanged) =>
+    // text of 'ctx.curr' is not updated, 'varip lbl' is not allowed
+    label.new(bar_index, na, str.format(
+          "H{9,time,HH:mm} L{10,time,HH:mm}\n"+
+          "[C]H{0,time,HH:mm} L{1,time,HH:mm} ({8,number,#.#})\n"+
+          "[0]O{2,time,HH:mm} H{3,time,HH:mm} L{4,time,HH:mm}\n"+
+          "[1]O{5,time,HH:mm} H{6,time,HH:mm} L{7,time,HH:mm}",
+          ctx.curr.high.time, ctx.curr.low.time,
+          ctx.get0O(), ctx.get0H(), ctx.get0L(),
+          ctx.get1O(), ctx.get1H(), ctx.get1L(),
+          int(timenow/1000)%10,
+          ctx.curr_time_h, ctx.curr_time_l),
+          yloc = yloc.abovebar, style = label.style_none, textcolor = color.black, size = size.small)
+    if ctx.points.size() > 0
+        lnH.set_xy1(ctx.points.get(0).open.index, ctx.curr.high.price)
+        lnH.set_xy2(bar_index, ctx.curr.high.price)
+        lnL.set_xy1(ctx.points.get(0).open.index, ctx.curr.low.price)
+        lnL.set_xy2(bar_index, ctx.curr.low.price)
+    lnH1.set_xy1(ctx.curr_index_h, ctx.curr_price_h)
+    lnH1.set_xy2(bar_index, ctx.curr_price_h)
+    lnL1.set_xy1(ctx.curr_index_l, ctx.curr_price_l)
+    lnL1.set_xy2(bar_index, ctx.curr_price_l)
+    if barstate.isnew
+        // isnew label created and removed
+        label.new(bar_index, na, "new\n\n\n\n", yloc = yloc.abovebar, style = label.style_none, textcolor = color.black, size = size.small)
+        if periodChanged
+            label.new(bar_index, na, "↻\n\n\n\n\n\n\n\n\n", yloc = yloc.abovebar, style = label.style_none, textcolor = color.black, size = size.small)
+            if ctx.points.size() > 0
+                pt0 = ctx.points.get(0)
+                pt0.high := chart.point.new(ctx.curr.high.time, ctx.curr.high.index, ctx.curr.high.price)
+                pt0.low := chart.point.new(ctx.curr.low.time, ctx.curr.low.index, ctx.curr.low.price)
+                pt0.close := chart.point.new(time_close[1], bar_index[1], close[1])
+            ctx.points.unshift(Point.new(
+                  high = na,
+                  low =  na,
+                  open = chart.point.new(time, bar_index, nz(close[1], open)),
+                  close = na))
+            if ctx.points.size() > MAX_POINTS_SIZE
+                ctx.points.pop()
+            // reset for max/min
+            ctx.curr.high.price := high
+            ctx.curr.high.time := time
+            ctx.curr.high.index := bar_index
+            ctx.curr.low.price := low
+            ctx.curr.low.time := time
+            ctx.curr.low.index := bar_index
+            ctx.curr_price_h := high
+            ctx.curr_price_l := low
+            ctx.curr_index_h := bar_index
+            ctx.curr_index_l := bar_index
+            ctx.curr_time_h := time
+            ctx.curr_time_l := time
+    if barstate.isconfirmed
+        label.new(bar_index, na, "confirmed\n\n\n\n\n", yloc = yloc.abovebar, style = label.style_none, textcolor = color.black, size = size.small)
+        label.new(bar_index, na, str.format(
+              "[0]{0,time,HH:mm} [T]{1,time,HH:mm}, [C]{2,time,HH:mm}\n\n\n\n\n\n",
+              ctx.get0O(), time, ctx.curr.high.time),
+              yloc = yloc.abovebar, style = label.style_none, textcolor = color.black, size = size.small)
+    ctx.curr.high.price := math.max(nz(ctx.curr.high.price, high), high)
+    ctx.curr.low.price := math.min(nz(ctx.curr.low.price, low), low)
+    ctx.curr_price_h := math.max(nz(ctx.curr_price_h, high), high)
+    ctx.curr_price_l := math.min(nz(ctx.curr_price_l, low), low)
+    high_changed = ta.change(ctx.curr.high.price) != 0 // changed with price[1], not price from previous tick!!
+    low_changed = ta.change(ctx.curr.low.price) != 0   // once updated, true until new bar
+    if high_changed or low_changed
+        ctx.curr.high.index := high_changed ? bar_index : ctx.curr.high.index
+        ctx.curr.low.index := low_changed ? bar_index : ctx.curr.low.index
+        ctx.curr.high.time := high_changed ? time : ctx.curr.high.time
+        ctx.curr.low.time := low_changed ? time : ctx.curr.low.time
+        ctx.curr_index_h := high_changed ? bar_index : ctx.curr_index_h
+        ctx.curr_index_l := low_changed ? bar_index : ctx.curr_index_l
+        ctx.curr_time_h := high_changed ? time : ctx.curr_time_h
+        ctx.curr_time_l := low_changed ? time : ctx.curr_time_l
+    h_time_changed = ta.change(ctx.curr.high.time) != 0
+    l_time_changed = ta.change(ctx.curr.low.time) != 0
+    if h_time_changed or l_time_changed
+        label.new(bar_index, na, "!\n\n\n\n\n\n\n", yloc = yloc.abovebar, style = label.style_none, textcolor = color.black, size = size.small)
+    h_time_changed1 = ta.change(ctx.curr_time_h) != 0
+    l_time_changed1 = ta.change(ctx.curr_time_l) != 0
+    if h_time_changed1 or l_time_changed1
+        label.new(bar_index, na, "!!\n\n\n\n\n\n\n\n", yloc = yloc.abovebar, style = label.style_none, textcolor = color.black, size = size.small)
+    //if barstate.islastconfirmedhistory
+    //    if ctx.points.size() > 0
+    //        pt0 = ctx.points.get(0)
+    //        pt0.high := chart.point.new(ctx.curr.high.time, ctx.curr.high.index, ctx.curr.high.price)
+    //        pt0.low := chart.point.new(ctx.curr.low.time, ctx.curr.low.index, ctx.curr.low.price)
+
+processArray(PeriodContext2 ctx, series bool periodChanged) =>
+    // 'var' label created on 1st run and do not changed on next ticks
+    label.new(bar_index, na, str.format("{0,time,HH:mm} {1,time,HH:mm}", ctx.get0(), ctx.curr), yloc = yloc.belowbar, style = label.style_none, textcolor = color.black, size = size.small)
+    if barstate.isnew
+        label.new(bar_index, na, "\nnew", yloc = yloc.belowbar, style = label.style_none, textcolor = color.black, size = size.small)
+        if periodChanged
+            label.new(bar_index, na, "\n\n\n\n↻", yloc = yloc.belowbar, style = label.style_none, textcolor = color.black, size = size.small)
+            // 'var' points do not changed in realtime
+            if ctx.points.size() > 0
+                ctx.points.set(0, time_close[1])
+            ctx.points.unshift(time)
+            if ctx.points.size() > MAX_POINTS_SIZE
+                ctx.points.pop()
+    if barstate.isconfirmed
+        label.new(bar_index, na, "\n\nconfirmed", yloc = yloc.belowbar, style = label.style_none, textcolor = color.black, size = size.small)
+        label.new(bar_index, na, str.format("\n\n\n{0,time,HH:mm} {1,time,HH:mm}", ctx.get0(), time), yloc = yloc.belowbar, style = label.style_none, textcolor = color.black, size = size.small)
+    // 'var' value is updated once per bar 
+    ctx.curr := time
+
+
+var map<string, PeriodContext1> arr1 = map.new<string, PeriodContext1>()
+var map<string, PeriodContext2> arr2 = map.new<string, PeriodContext2>()
+// Initialization
+if bar_index == 0
+    for key in periodArray
+        arr1.put(key, emptyPeriodContext1())
+        arr2.put(key, emptyPeriodContext2())
+
+if timeframe.isintraday
+    arr1.get("5").process(ta.change(time("5")) > 0)
+    processArray(arr2.get("5"), ta.change(time("5")) > 0)
+

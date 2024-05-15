@@ -1,0 +1,18 @@
+//@version=6
+indicator("Var keyword example", overlay = true)
+
+var a = close
+var b = float(na)
+var c = float(na)
+var green_bars_count = 0
+if close > open
+    var x = close
+    b := x
+    green_bars_count := green_bars_count + 1
+    if green_bars_count >= 10
+        var y = close
+        c := y
+
+plot(a)  // The variable 'a' keeps the closing price of the first bar for each bar in the series.
+plot(b)  // The variable 'b' keeps the closing price of the first "green" bar in the series.
+plot(c)  // The variable 'c' keeps the closing price of the tenth "green" bar in the series.

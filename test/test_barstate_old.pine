@@ -1,0 +1,133 @@
+//@version=5
+indicator("barstate", overlay = true)
+
+
+var testLbl = label.new(na,na,"test",yloc=yloc.abovebar,style=label.style_arrowdown)
+testLbl.set_point(chart.point.now())  // updated every tick !
+
+// {{ [var|varip] count = count + 1 }} 
+// empty - reset on each bar, result is '1'
+// var - do not reset, changed '+1' per bar, result is 'bar_index+1'
+// varip - like var + intra-bar, result is 'bar_index + <all ticks>'
+// 
+// var   isconfirmed - is updated per bar
+// varip isconfirmed - is updated per bar
+// var   isnew       - is not updated!!
+// varip isnew       - is updated per bar
+// 
+// varip - "count ticks per history", 1 tick per history bar
+// 'isnew' can be used to reset 'varip' to get "count ticks per bar" (https://www.tradingview.com/pine-script-docs/en/v5/concepts/Bar_states.html#barstate-isnew)
+// 'isconfirmed' ??? be used to reset 'varip' to get "count ticks per bar"  {{count = <count new> + 1}}
+//  
+// 'lasthistory' = time[1] of <'last' not realtime>
+// 'last' = <'last' not realtime> for only 1 bar after loading
+// 'confirmed' = time[1] of 'new' 
+//
+
+// https://www.tradingview.com/pine-script-docs/en/v5/concepts/Repainting.html?highlight=isnew#bar-state-built-ins
+// barstate.isnew is true on the bar’s close, yet in realtime, it is true on the bar’s open
+
+
+// https://www.tradingview.com/pine-script-docs/en/v5/concepts/Bar_states.html#barstate-isnew
+// updateNo() =>
+//     varip int updateNo = na
+//     if barstate.isnew
+//         updateNo := 1
+//     else
+//         updateNo += 1
+
+
+if timeframe.isintraday
+    var int count = 0
+    var int count7 = 0
+    var int count8 = 0
+    count00 = 0
+    count9 = 0
+    count10 = 0
+    varip int count0 = 0
+    varip int count1 = 0
+    varip int count2 = 0
+    varip int count3 = 0
+    varip int count4 = 0
+    varip int count5 = 0
+    varip int count6 = 0
+    varip int count11 = 0
+    varip int count12 = 0
+    var int timet = na
+    var int time7 = na
+    var int time8 = na
+    int time9 = na
+    int time10 = na
+    varip int time0 = na
+    varip int time1 = na
+    varip int time2 = na
+    varip int time3 = na
+    varip int time4 = na
+    varip int time5 = na
+    varip int time6 = na
+    count := count + 1
+    timet := time
+    count0 := count0 + 1
+    time0 := time
+    count00 := count00 + 1
+    if barstate.islastconfirmedhistory
+        count4 := count4 + 1
+        time4 := time 
+    if barstate.isrealtime
+        count1 := count1 + 1
+        time1 := time
+        if barstate.isnew
+            count2 := count2 + 1
+            time2 := time
+            count7 := count7 + 1
+            time7 := time
+            count9 := count9 + 1
+            time9 := time
+            count11 := 0
+        if barstate.isconfirmed
+            count3 := count3 + 1
+            time3 := time
+            count8 := count8 + 1
+            time8 := time
+            count10 := count10 + 1
+            time10 := time
+            count12 := 0
+        count11 := count11 + 1
+        count12 := count12 + 1
+        if barstate.islast
+            count6 := count6 + 1
+            time6 := time
+    else
+        if barstate.islast
+            count5 := count5 + 1
+            time5 := time 
+    testLbl.set_text(str.format(
+          "var: {0} {1,time,HH:mm}\n"+
+          "empty: {25}\n"+
+          "varip: {2} {3,time,HH:mm}\n"+
+          "realtime: {4} {5,time,HH:mm}\n"+
+          "bar: {26} {27}\n"+
+          "new: {20} {21,time,HH:mm}\n"+
+          "new_ip: {6} {7,time,HH:mm}\n"+
+          "new_v: {16} {17,time,HH:mm}\n"+
+          "confirmed: {22} {23,time,HH:mm}\n"+
+          "confirmed_ip: {8} {9,time,HH:mm}\n"+
+          "confirmed_v: {18} {19,time,HH:mm}\n"+
+          "last: {14} {15,time,HH:mm}\n"+
+          "lasthistory: {10} {11,time,HH:mm}\n"+
+          "last_h: {12} {13,time,HH:mm}\n"+
+          "bar_index: {24}",
+          count, timet, 
+          count0, time0,
+          count1, time1, count2, time2,
+          count3, time3,
+          count4, time4,
+          count5, time5,
+          count6, time6,
+          count7, time7, count8, time8,
+          count9, time9, count10, time10,
+          bar_index,
+          count00,
+          count11, count12))
+
+//plot(na)

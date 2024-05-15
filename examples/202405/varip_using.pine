@@ -1,0 +1,185 @@
+﻿// REUSING THIS CODE: You are welcome to reuse this code without permission, including in closed-source publications. Credits are always appreciated.
+
+//@version=4
+//@author=LucF, for PineCoders
+// PineCoders, Tools and ideas for all Pine coders: pinecoders.com
+
+// "Using `varip` variables [PineCoders]
+//  v1.0, 2021.03.30 12:37 — LucF
+
+// This script showcases the new `varip` variables in Pine. It has three parts:
+//  - Part 1 shows how to trigger alerts on conditions lasting for a specific amount of time.
+//  - Part 2 shows how to calculate and display the average of `close` for all realtime updates in a bar using a `varip` array.
+//  - Part 3 presents a function to calculate the up/down/neutral volume by looking at price and volume variations between realtime bar updates.
+
+// This code was written using:
+//  • PineCoders Coding Conventions for Pine: http://www.pinecoders.com/coding_conventions/
+
+study("Using `varip` variables [PineCoders]", "", true, precision = 2)
+
+
+// ——————————
+// —————————— PART 1: How to trigger alerts on conditions lasting for a specific amount of time.
+// ——————————
+
+
+// —————————— Inputs
+float i_seconds   = input(20,    "Duration of condition",       minval = 1, tooltip = "Seconds for which the condition must be continuously true.")
+bool  i_reset     = input(true,  "Reset timing on new bar",     tooltip = "When checked, the duration will reset every time a new realtime bar begins.")
+bool  i_alternate = input(false, "Up/Dn alerts must alternate", tooltip = "This is useful to decrease the number of generated alerts.")
+
+
+// —————————— Functions
+// ————— Function returning the number of the realtime bar update.
+f_updateNo() => 
+    varip int _updateNo = na
+    _updateNo := barstate.isnew ? 1 : _updateNo + 1
+
+// ————— Function returning the duration in seconds for which `_cond` is continuously true.
+f_secondsSince(_cond, _resetCond) =>
+    // bool _cond     : condition to test.
+    // bool _resetCond: when `true`, the duration resets.
+    varip float _timeBegin = na
+    varip bool  _lastCond  = false
+    if _resetCond
+        // Reset time if required.
+        _timeBegin := _cond ? timenow : na
+    else if _cond
+        if not _lastCond
+            // First occurrence of true `_cond`; save beginnning time.
+            _timeBegin := timenow
+    else
+        // Condition is not true; reset beginning time.
+        _timeBegin := na
+    // Remember the last state of the `_cond` so we can detect transitions.
+    _lastCond := _cond
+    // Return seconds since beginning of condition, or `na`.
+    float _return = (timenow - _timeBegin) / 1000
+
+
+// —————————— Calcs
+float ma = sma(close, 10)
+// `true` when an alert must be triggered.
+bool alertUp = false
+bool alertDn = false
+// Used to toggle between up and dn alerts.
+varip bool lastAlertWasUp = na
+// Conditions of which we test the duration.
+bool bullCond = close > ma
+bool bearCond = close < ma
+// Get duration of each condition, resetting the timing when user has selected to reset timing on new realtime bars.
+float secondsUp = f_secondsSince(bullCond, i_reset and barstate.isnew)
+float secondsDn = f_secondsSince(bearCond, i_reset and barstate.isnew)
+// Trigger an alert if limit duration was reached. Toggle up/dn alerts if required. Always trigger when no alert was triggered before.
+alertUp := secondsUp > i_seconds and ((not i_alternate) or na(lastAlertWasUp) or not lastAlertWasUp)
+alertDn := secondsDn > i_seconds and ((not i_alternate) or na(lastAlertWasUp) or lastAlertWasUp)
+// Save direction of last alert to test for alternating directions.
+lastAlertWasUp := alertUp ? true : alertDn ? false : lastAlertWasUp
+
+
+// —————————— Alerts
+// Fetch sequence number of this realtime bar update.
+string updateNo = tostring(f_updateNo())
+// Build alert message and trigger alerts if needed.
+string alertMsg = ""
+if alertUp
+    alertMsg := "Close was above MA for " + tostring(secondsUp) + " seconds on update #" + updateNo + "."
+    alert(alertMsg, alert.freq_all)
+else if alertDn
+    alertMsg := "Close was below MA for " + tostring(secondsDn) + " seconds on update #" + updateNo + "."
+    alert(alertMsg, alert.freq_all)
+
+
+// —————————— Plots
+// ————— Chart plots and Data Window values.
+plotchar(na, "═════ Part 1", "", location.top)
+plot(ma, "ma", color.orange)
+plotchar(barstate.isrealtime and bullCond, "bullCond", "—", location.top,    color.lime, size = size.tiny)
+plotchar(barstate.isrealtime and bearCond, "bearCond", "—", location.bottom, color.red,  size = size.tiny)
+plotchar(secondsUp, "secondsUp", "", location.top,    color.lime, size = size.tiny)
+plotchar(secondsDn, "secondsDn", "", location.bottom, color.red,  size = size.tiny)
+plotchar(lastAlertWasUp, "lastAlertWasUp", "", location.top, size = size.tiny)
+plotchar(alertUp, "alertUp", "▲", location.top,    color.lime, size = size.tiny)
+plotchar(alertDn, "alertDn", "▼", location.bottom, color.red,  size = size.tiny)
+plotchar(f_updateNo(), "f_updateNo()", "", location.top, size = size.tiny)
+
+// ————— Maintain and display the alert log.
+varip string alertLog = ""
+// Reset the log on new bars, and add the alert message to it when an alert is triggered.
+if barstate.isnew
+    alertLog := ""
+alertLog += alertUp or alertDn ? alertMsg + "\n" : ""
+// Show log of current bar to its right.
+f_print(_text) => var _label = label.new(bar_index, na, _text, xloc.bar_index, yloc.price, color(na), label.style_label_left, color.gray, size.large, text.align_left), label.set_xy(_label, bar_index, highest(10)[1]), label.set_text(_label, _text)
+f_print(alertLog)
+// Leave the log on elapsed realtime bars in the form of a square above each bar, with the log in its tooltip.
+if barstate.isrealtime and barstate.isconfirmed and alertLog != ""
+    label.new(bar_index, na, yloc = yloc.abovebar, color = color.gray, style = label.style_square, size = size.tiny, tooltip = alertLog)
+
+
+
+
+// ——————————
+// —————————— PART 2: Calculate and display the average of `close` for all realtime updates in a bar using a `varip` array.
+// ——————————
+
+// ————— Function returning the average of `close` for all realtime updates.
+f_avgCloses() =>
+    // Declare an array that will hold successive `close` values across realtime updates.
+    varip float[] closes = array.new_float(0)
+    if barstate.isnew
+        // A new realtime bar is created or we are running on historical bars;
+        //   clear the array from the value(s) gathered during the previous bar.
+        array.clear(closes)
+    // Save the current `close` on each historical bar or realtime update.
+    array.push(closes, close)
+    float _return = array.avg(closes)
+
+float avgCloses = f_avgCloses()
+plotchar(na, "═════ Part 2", "", location.top)
+// Only plot a value in realtime.
+plot(barstate.isrealtime ? avgCloses : na, "Avg closes", color.orange, 3, plot.style_circles)
+
+
+
+
+// ——————————
+// —————————— PART 3: Directional volume.
+// ——————————
+
+// ————— Function returning up, down and neutral volume determined by the movement of price between updates.
+f_upDnNtVolume() =>
+    varip float _prevClose = open
+    varip float _prevVolume = 0.
+    varip float _newVolume = 0.
+    varip float _volUp = 0.
+    varip float _volDn = 0.
+    varip float _volNt = 0.
+    if barstate.isnew
+        _volUp := 0.
+        _volDn := 0.
+        _volNt := 0.
+        _prevClose := nz(close[1])
+        _prevVolume := 0.
+    _newVolume := volume - _prevVolume
+    // Determine is direction of volume using the movement of price between updates.
+    if close > _prevClose
+        _volUp += _newVolume
+    else if close < _prevClose
+        _volDn += _newVolume
+    else
+        _volNt += _newVolume
+    _prevClose := close
+    _prevVolume := volume
+    [_volUp, _volDn, _volNt]
+
+[volUp, volDn, volNt] = f_upDnNtVolume()
+deltaVol = volUp - volDn
+totVol   = volUp + volDn + volNt
+
+plotchar(na, "═════ Part 3", "", location.top)
+plotchar(deltaVol, "deltaVol", "", location.top, deltaVol > 0 ? color.lime : color.red)
+plotchar(volUp,    "volUp",    "", location.top)
+plotchar(volDn,    "volDn",    "", location.top)
+plotchar(volNt,    "volNt",    "", location.top)
+plotchar(totVol,   "totVol",   "", location.top)

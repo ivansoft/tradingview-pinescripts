@@ -1,0 +1,308 @@
+// This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © ivansoft
+
+// help
+// https://www.tradingview.com/pine-script-reference/v5/#var_syminfo.tickerid
+
+//@version=5
+indicator("DayHighLowTest", overlay = true, max_lines_count = 2, max_labels_count = 4)
+
+// https://www.tradingview.com/pine-script-reference/v5/#fun_input.source (display parameter)
+const string groupName = "Border and fill colors"
+color textColorInput  = input.color(color.new(color.gray, 10), title='Color', inline = "Color", group=groupName)
+color lineColorHighLowInput  = input.color(color.new(color.blue, 35), title='', inline = "Color", group=groupName)
+color lineColorSessionOpenInput  = input.color(color.new(color.green, 35), title='', inline = "Color", group=groupName)
+color backColorSessionMainInput  = input.color(color.new(color.silver, 85), title='', inline = "Color", group=groupName)
+color backColorSessionEveningInput  = input.color(color.new(color.blue, 85), title='', inline = "Color", group=groupName)
+int textSizeInput     = input.int(11, title='Text Size', minval=8, maxval=12, tooltip = "From 8 to 12", display = display.none, group=groupName)
+int lineWidthInput    = input.int(1, title='Line Width', minval=1, display = display.none, inline = "Line", group=groupName)
+string lineStyleInput = input.string(line.style_dotted, title='', options=[line.style_solid, line.style_dotted], display = display.none, inline = "Line", group=groupName)
+
+const color NO_COLOR = color(na)
+
+// Prevent a runtime error caused by an incorrect 'security_lower_tf' using
+var string lowerTfPeriod = timeframe.in_seconds(timeframe.period) < timeframe.in_seconds("1") ? timeframe.period : "1"
+
+// if the size of the array is 0, a runtime error will be thrown
+method firstBar(array<int> srcArray) =>
+    srcArray.size() == 0 ? 0 : srcArray.first()
+method lastBar(array<int> srcArray) =>
+    srcArray.size() == 0 ? 0 : srcArray.last()
+
+// Checks the time of the first and the last 1-minute bar within the current's timeframe bar.
+// Why it's so difficult? example: 
+// The 15-minute bar shows 08:45, but in reality the first bar was 08:59, and time("","0850-0900") returns 'na' - this is wrong, we get the gap
+isInsideTheSession(simple string session_spec) =>
+    array<int> time1 = timeframe.isseconds ?
+      array.from(time(timeframe.period, session_spec)) :
+      request.security_lower_tf(syminfo.tickerid, lowerTfPeriod, time(timeframe.period, session_spec))
+    not na(time1.firstBar()) and not na(time1.lastBar())
+
+//simple bool isIntraday = timeframe.isseconds or (timeframe.isintraday and timeframe.multiplier <= 30)
+simple bool isIntraday = timeframe.isintraday and timeframe.multiplier <= 30
+
+// https://www.moex.com/ru/derivatives/
+const int SESSION_NONE         = 0
+const int SESSION_MORNING_OPEN = 1  // "0850-0900"
+const int SESSION_MORNING      = 1  // "0900-1000"
+const int SESSION_MAIN         = 1  // "1000-1850" -> union all to "0850-1850"
+const int SESSION_EVENING      = 2  // "1905-2350"
+simple bool isMOEX = syminfo.prefix == "MOEX"
+simple bool isFuture = syminfo.type == "futures"
+simple bool isMoexFuture = isMOEX and isFuture
+// rare case, but
+simple string timezoneMsk = "Europe/Moscow"
+if isMOEX and syminfo.timezone != timezoneMsk
+    runtime.error('Symbol\'s time zone is not the "Europe/Moscow" time zone')
+
+series int sessionsSeries = if isIntraday and isMoexFuture
+    switch
+        isInsideTheSession("1905-2350") => SESSION_EVENING
+        => SESSION_MAIN
+else
+    SESSION_NONE
+
+// Highlight sessions on the background with different coloring
+series color backColorSession = switch
+    sessionsSeries == SESSION_MAIN => backColorSessionMainInput
+    sessionsSeries == SESSION_EVENING => backColorSessionEveningInput
+    => NO_COLOR
+//bgcolor(backColorSession)
+
+// separate series
+series bool inSessionMain = sessionsSeries == SESSION_MAIN  // isInsideTheSession("0900-1850") and isMoexFuture
+series bool inSessionEvening = sessionsSeries == SESSION_EVENING  // isInsideTheSession("1905-2350") and isMoexFuture
+
+
+type TypeInfoHL
+    chart.point high   // bar's high
+    chart.point low    // bar's low
+
+type TypeInfoSOC
+    chart.point close  // prev session close
+    chart.point open   // new session open
+
+type TypeHL
+    float high
+    float low
+
+
+var float lastssOpen = na    
+sessionOpenSeries = if ta.change(sessionsSeries) > 0
+    switch
+        inSessionEvening =>
+            lastssOpen := nz(close[1], open)
+            lastssOpen
+        => na
+else
+    lastssOpen
+plot(sessionOpenSeries, "ss", lineColorSessionOpenInput, 2, plot.style_line, editable = false)
+
+var lastDayIndex = array.new<int>()
+//lastDayIndex := ta.change(sessionsSeries) > 0 and inSessionMain ? bar_index : lastDayIndex
+if ta.change(sessionsSeries) != 0 and inSessionMain
+    lastDayIndex.push(bar_index)
+length = lastDayIndex.size() > 1 ? bar_index-lastDayIndex.shift() : 1
+var float lastHValue = na
+highestSeries = ta.highest(high, length )
+if ta.change(sessionsSeries) != 0 and inSessionMain
+    lastHValue := highestSeries
+dayHSeries = lastHValue
+plot(dayHSeries, "H", editable = false, color = lineColorHighLowInput)
+
+var float lastLValue = na
+lowesSeries = ta.lowest(low, length)
+if ta.change(sessionsSeries) != 0 and inSessionMain
+    lastLValue := lowesSeries
+dayLSeries = lastLValue
+plot(dayLSeries, "L", editable = false, color = lineColorHighLowInput)
+
+
+const int SESSION_STARTED = 0
+const int SESSION_ENDED = 1
+const int SESSION_INSIDE = 2
+const int SESSION_OUTSIDE = 3
+
+//detectSessionBoundaries(simple string session_spec) =>
+//    array<int> time1 = request.security_lower_tf(syminfo.tickerid, "1", time("", session_spec))
+//    switch
+//        not na(time1.firstBar()) and not na(time1.lastBar()) => [SESSION_INSIDE, na]
+//        not na(time1.firstBar()) and na(time1.lastBar()) => [SESSION_ENDED, na]
+//        na(time1.firstBar()) and not na(time1.lastBar()) => [SESSION_STARTED, chart.point.now(nz(close[1], open))]
+//        => [SESSION_OUTSIDE, na]
+
+
+//time("W")
+//ta.change()
+
+
+// https://www.tradingview.com/pine-script-docs/en/v5/language/Execution_model.html#historical-values-of-functions
+//getLineStyle(simple string style) =>
+//    result =
+//      switch style
+//        'Solid' => line.style_solid
+//        'Dotted' => line.style_dotted
+//        => line.style_solid
+
+// https://www.tradingview.com/pine-script-docs/en/v5/language/Objects.html
+type TypeDayHL
+    float high
+    float low
+type TypeWeekHL
+    float high
+    float low
+type TypeYearHL
+    float high
+    float low
+
+TypeDayHL day = request.security(syminfo.tickerid, "1D", TypeDayHL.new())
+
+// Looks like "settlement-as-close" has no effect, does not work
+modified_tiker_id(backadjustment = "default", settlement_as_close = true) =>
+    "={" + str.format('"backadjustment":"{0}","settlement-as-close":{1},"symbol":"{2}"', backadjustment, settlement_as_close, ticker.standard(syminfo.tickerid)) + "}"
+// https://www.tradingview.com/pine-script-docs/en/v5/concepts/Repainting.html#repainting-request-security-calls
+nonRepaintingSecurity(sym, tf, src) =>
+    request.security(sym, tf, src[barstate.isrealtime ? 1 : 0])[barstate.isrealtime ? 0 : 1]
+// https://www.tradingview.com/pine-script-docs/en/v5/concepts/Repainting.html#future-leak-with-request-security
+nonRepaintingSecurityAlternate(sym, tf, src) =>
+    request.security(sym, tf, src[1], lookahead = barmerge.lookahead_on)
+
+
+
+
+
+//[lowD, highD] = request.security(modified_tiker_id(settlement_as_close = false), "1D", [low, high])
+highD = nonRepaintingSecurity(modified_tiker_id(settlement_as_close = false), "D", high)
+bar_indexD = nonRepaintingSecurity(modified_tiker_id(settlement_as_close = false), "D", bar_index)
+//highD = request.security(modified_tiker_id(settlement_as_close = false), "1D", high)
+
+// https://www.tradingview.com/pine-script-docs/en/v5/concepts/Levels.html (price 'input float' only)
+//hline(16600, "tt", color.maroon, hline.style_solid, 2)
+//plot(highD, editable = false, display = display.pane)
+// https://www.tradingview.com/pine-script-docs/en/v5/concepts/Plots.html#levels
+//plot(highD, editable = false, trackprice = true, show_last = 1, offset = -99999)
+
+
+
+
+
+// https://www.tradingview.com/pine-script-docs/en/v5/concepts/Sessions.html#session-strings
+sessionBegins(sess) =>
+    t = time(timeframe.period, sess)
+    timeframe.isintraday and (not barstate.isfirst) and na(t[1]) and not na(t)
+//var float hi = na
+//var float lo = na
+var float ssOpen = na
+var color ssColor = color.new(color.lime, 75)
+if sessionBegins("1900-1906")
+    //hi := high
+    //lo := low
+    ssOpen := open
+//plot(lo, "lo", color.fuchsia, 2, plot.style_circles)
+//plot(hi, "hi", color.lime,    2, plot.style_circles)
+//plot(ssOpen, "ss", ssColor,    2, plot.style_line, editable = false)
+
+
+//if barstate.islast
+//    chart.point.now(lowD[0])
+//    line.new()
+//    //hline(lowD[0], "lowD", color.red)
+//    //hline(highD[0], "lowD", color.red)
+
+
+// TEST
+varip int count = 0
+count := count + 1
+
+//if bar_index % 100 == 0
+//    label.new(bar_index, na, text = str.tostring(bar_index)+"\n"+str.tostring(count)+"\n↓", yloc = yloc.abovebar, style = label.style_none, color = textColorInput)
+
+
+// DEBUG
+//time1 = request.security(syminfo.tickerid, "1", time) // last "1" bar within current bar
+//array<int> time1Arr = request.security_lower_tf(syminfo.tickerid, "1", time)
+//array<int> time1Arr01= request.security_lower_tf(syminfo.tickerid, "1", time("", "2346-2350"))
+//array<int> time1Arr02= request.security_lower_tf(syminfo.tickerid, "1", time("", "1905-2350"))
+//method strTime(int timestamp) =>
+//    na(timestamp) ? na : str.format_time(timestamp, "HH:mm")
+//method strTime(array<int> srcArray) =>
+//    var a = array.new<string>()
+//    a.clear()
+//    for value in srcArray
+//        a.push(value.strTime())
+//    a
+
+
+printTable(txtLeft, txtRight) =>
+    var table t = table.new(position.top_right, 2, 1)
+    table.cell(t, 0, 0, txtLeft, bgcolor = color.yellow, text_halign = text.align_right)
+    table.cell(t, 1, 0, txtRight, bgcolor = color.yellow, text_halign = text.align_left)
+
+nl = "\n"
+left =
+  //"syminfo.basecurrency: "  + nl +
+  //"syminfo.currency: "      + nl +
+  //"syminfo.description: "   + nl +
+  //"syminfo.mintick: "       + nl +
+  //"syminfo.pointvalue: "    + nl +
+  "syminfo.prefix: "        + nl +
+  //"syminfo.root: "          + nl +
+  "syminfo.session: "       + nl +
+  "syminfo.ticker: "        + nl +
+  "syminfo.tickerid: "      + nl +
+  "syminfo.timezone: "      + nl +
+  "syminfo.type: "          + nl +
+  "bar_indexD[0]: "         + nl +
+  "bar_index[0]: "          + nl +
+  "timeframe.isintraday: "  //+ nl +
+  //"time: "          //+ nl +
+
+right =
+  //syminfo.basecurrency              + nl +
+  //syminfo.currency                  + nl +
+  //syminfo.description               + nl +
+  //str.tostring(syminfo.mintick)     + nl +
+  //str.tostring(syminfo.pointvalue)  + nl +
+  syminfo.prefix                    + nl +
+  //syminfo.root                      + nl +
+  syminfo.session                   + nl +
+  syminfo.ticker                    + nl +
+  syminfo.tickerid                  + nl +
+  syminfo.timezone                  + nl +
+  syminfo.type                      + nl +
+  str.format("{0} / price: {1}", str.tostring(bar_indexD[0]), str.tostring(highD[0])) + nl +
+  str.tostring(bar_index[0])        + nl +
+  str.format("{0},{1},{2}, {3} / {4}", timeframe.isintraday, timeframe.multiplier, timeframe.isseconds, bar_index, lastDayIndex)        //+ nl +
+  //str.format("{0}, {1}, {2}", time1Arr.firstBar().strTime(), time1Arr01.strTime(), time("", "0900-1850"))       //+ nl +
+
+//printTable(left, right)
+
+
+// https://www.tradingview.com/pine-script-docs/en/v5/writing/Debugging.html#labels-on-last-bar
+print(txt) =>
+    // Create label on the first bar.
+    var lbl = label.new(bar_index, na, txt, xloc.bar_index, yloc.price, color(na), label.style_none, color.gray, size.large, text.align_left)
+    // On next bars, update the label's x and y position, and the text it displays.
+    label.set_xy(lbl, bar_index, ta.highest(10)[1])
+    label.set_text(lbl, txt)
+
+//print(str.tostring(bar_index))
+
+
+// https://www.tradingview.com/pine-script-docs/en/v5/language/Execution_model.html#historical-values-of-functions
+//@function Calculates the index of the current bar by adding 1 to its own value from the previous bar.
+calcBarIndex() =>
+    // The first bar will have an index of 0.
+    int index = na
+    // The nz() function replaces na values with a specified replacement value (0 by default).
+    index := nz(index[1], replacement = -1) + 1
+//@variable Returns `true` on every other bar.
+condition = bar_index % 2 == 0
+int customIndex = na
+// Call `calcBarIndex()` when the `condition` is `true`. This prompts the compiler to raise a warning.
+//if condition
+//    customIndex := calcBarIndex()
+//plot(bar_index,   "Bar index",    color = color.green)
+//plot(customIndex, "Custom index", color = color.red, style = plot.style_cross)
+customIndex := calcBarIndex()
+//print(str.format("{0}\n",customIndex[1]))

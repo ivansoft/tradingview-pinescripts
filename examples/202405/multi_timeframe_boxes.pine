@@ -1,0 +1,106 @@
+//@version=5
+indicator("Multi-Time Period Charts", overlay=true, max_boxes_count=500)
+
+AUTO_TIMEFRAME_TOOLTIP = "When the Auto option is selected, the timeframe of the indicator is chosen automatically based on the chart timeframe. The Timeframe dropdown is ignored. The automated timeframes are: \n
+
+ '1 day' for any chart timeframes below '1 day' \n
+
+ '1 week' for any timeframes starting from '1 day' up to '1 week' \n
+
+ '1 month' for any timeframes starting from '1 week' up to '1 month' \n
+
+ '3 months' for any timeframes starting from '1 month' up to '3 months' \n
+
+ '12 months' for any timeframes above '3 months'"
+
+HLR = "High/Low Range"
+TR = "True Range"
+HAR = "Heikin Ashi Range"
+
+DEFAULT_RESOLUTION = "1M"
+DEFAULT_COLOR_GROWTH = color.rgb(0, 150, 136, 80)
+DEFAULT_COLOR_FALL = color.rgb(244, 67, 54, 80)
+DEFAULT_CALCULATION_METHOD = HLR
+DEFAULT_AUTO_RESOLUTION = true
+
+var prevBarIndex = bar_index
+
+drawBox(left, right, top, bottom, diff, growthColorInput, fallColorInput, borderGrowth, borderFall) =>
+    drawnBox = box.new(left, top, right, bottom)
+    if diff < 0
+        box.set_border_color(drawnBox, borderFall)
+        box.set_bgcolor(drawnBox, fallColorInput)
+    else
+        box.set_border_color(drawnBox, borderGrowth)
+        box.set_bgcolor(drawnBox, growthColorInput)
+    drawnBox
+
+selectAutoTimeframe() =>
+     timeframe.isseconds ? '120':
+     timeframe.isminutes ? '1440':
+     timeframe.isdaily ? 'W':
+     timeframe.isweekly ? 'M':
+     timeframe.ismonthly and timeframe.multiplier < 3 ? '3M': '12M'
+
+selectTimeFrameFromInput(tf) =>
+     syminfo.session == session.extended and tf == '1D' ? '1440' : tf // there are no bars from extended hours on daily resolutions, hence we use '24h' resolution instead
+
+autoTimeframeInput = input(DEFAULT_AUTO_RESOLUTION, title="AutoTimeframe", tooltip=AUTO_TIMEFRAME_TOOLTIP)
+timeframeInput = input.timeframe(DEFAULT_RESOLUTION, title="Timeframe")
+timeframe = autoTimeframeInput ? selectAutoTimeframe() : selectTimeFrameFromInput(timeframeInput)
+
+calculationMethodInput = input.string(DEFAULT_CALCULATION_METHOD, "Calculation", options = [HLR, TR, HAR])
+
+groupName = "Border and fill colors"
+growthBorderColorInput = input(color.new(DEFAULT_COLOR_GROWTH, 0), title="Growth Body",inline="growth", group = groupName)
+growthColorInput = input(DEFAULT_COLOR_GROWTH, title="",inline="growth", group = groupName)
+fallBorderColorInput = input(color.new(DEFAULT_COLOR_FALL, 0), title="Fall Body", inline="fall", group = groupName)
+fallColorInput = input(DEFAULT_COLOR_FALL, title="", inline="fall", group = groupName)
+
+type OHLC
+    float o
+    float h
+    float l
+    float c
+    float prevC
+
+makeOHLC(int bb = 0)=>
+    OHLC.new(open[bb], high[bb], low[bb], close[bb], close[bb+1])
+
+[bar0, bar1] = request.security(syminfo.tickerid, timeframe, [makeOHLC(0), makeOHLC(1)], lookahead=barmerge.lookahead_on)
+
+isNewPeriod = ta.change(time(timeframe))
+
+drawCurrent = barstate.islast and not isNewPeriod
+sec = drawCurrent ? bar0 : bar1
+sec := na(sec) ? OHLC.new() : sec
+diff = sec.c - sec.o
+left = prevBarIndex
+right = drawCurrent ? bar_index : bar_index-1
+
+[ashiHigh, ashiLow] = request.security(ticker.heikinashi(syminfo.tickerid), timeframe, [high, low])
+float top = na
+float bottom = na
+
+if calculationMethodInput == HLR
+    top := sec.h
+    bottom := sec.l
+else if calculationMethodInput == TR
+    top := math.max(sec.h, sec.prevC)
+    bottom := math.min(sec.l, sec.prevC)
+else if calculationMethodInput == HAR
+    top := ashiHigh
+    bottom := ashiLow
+
+if isNewPeriod
+    prevBarIndex := bar_index
+    drawBox(left, right, top, bottom, diff, growthColorInput, fallColorInput, growthBorderColorInput, fallBorderColorInput)
+
+var box prevBox = na
+
+if barstate.islast
+    if isNewPeriod
+        prevBox := na
+    else
+        box.delete(prevBox)
+        prevBox := drawBox(left, right, top, bottom, diff, growthColorInput, fallColorInput, growthBorderColorInput, fallBorderColorInput)

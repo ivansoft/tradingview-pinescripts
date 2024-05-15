@@ -1,0 +1,71 @@
+﻿// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © PineCoders
+//@version=5
+ 
+// @description     This library provides string manipulation functions to complement the Pine Script™ `str.*()` built-in functions.
+library("Strings", true)
+
+// Strings Library
+// v1, 2022.04.09 13:26
+// This code was written using the recommendations from the Pine Script™ User Manual's Style Guide:
+//   https://www.tradingview.com/pine-script-docs/en/v5/writing/Style_guide.html
+
+
+
+// ———————————————————— Library functions {
+
+
+// @function            Extracts the part of the `str` string that is left of the nth `occurrence` of the `separator` string.
+// @param str           (series string) Source string.
+// @param separator     (series string) Separator string.
+// @param occurrence    (series int) Occurrence of the separator string. Optional. The default value is zero (the 1st occurrence).
+// @returns             (string) The extracted string. 
+export leftOf(simple string str, simple string separator, simple int occurrence = 0) =>
+    str.match(str, "(?:[^" + separator + "]*" + separator + "){" + str.tostring(occurrence) + "}[^" + separator + "]*")
+export leftOf(series string str, series string separator, series int occurrence = 0) =>
+    str.match(str, "(?:[^" + separator + "]*" + separator + "){" + str.tostring(occurrence) + "}[^" + separator + "]*")
+
+
+// @function            Extracts the part of the `str` string that is right of the nth `occurrence` of the `separator` string.
+// @param str           (series string) Source string.
+// @param separator     (series string) Separator string.
+// @param occurrence    (series int) Occurrence of the separator string. Optional. The default value is zero (the 1st occurrence).
+// @returns             (string) The extracted string. 
+export rightOf(simple string str, simple string separator, simple int occurrence = 0) =>
+    string match  = str.match(str, "([^" + separator + "]*" + separator + "\s*){" + str.tostring(occurrence + 1) + "}")
+    string result = str.replace(str, match, "") 
+export rightOf(series string str, series string separator, series int occurrence = 0) =>
+    string match  = str.match(str, "([^" + separator + "]*" + separator + "\s*){" + str.tostring(occurrence + 1) + "}")
+    string result = str.replace(str, match, "") 
+// }
+
+
+
+// ———————————————————— Example Code {
+
+
+// Function to display one table cell.
+printCell(id, col, row, str, clr) => 
+    table.cell(id, col, row, str, text_color = clr, text_halign = text.align_left, text_size = size.normal)
+
+// Determine if the last chart price is high, in which case we will position the table at the bottom.
+bool lastPriceIsHigh = ta.percentrank(ohlc4, 100) > 50
+
+// Display examples using a table.
+if barstate.islast
+    string tablePosition = lastPriceIsHigh ? position.bottom_right : position.top_right
+    var table display = table.new(tablePosition, 2, 3, color.new(color.black, 100), color.gray, 1, color.gray, 1)
+    color codeColor   = color.blue
+    color resultColor = color.gray
+    // Headers
+    table.cell(display, 0, 0, "Code",   bgcolor = color.new(color.fuchsia, 60), text_color = color.white, text_halign = text.align_left, text_size = size.normal)
+    table.cell(display, 1, 0, "Result", bgcolor = color.new(color.lime, 60),    text_color = color.white, text_halign = text.align_left, text_size = size.normal)
+    // Left column
+    printCell(display, 0, 1, 'leftOf("NASDAQ:MSFT", ":")\nleftOf("yyyy-mm-dd", "-", 2)', codeColor)
+    printCell(display, 0, 2, 'rightOf("NASDAQ:MSFT", ":")\nrightOf("NASDAQ:MSFT, NASDAQ:TSLA", ":", 2)', codeColor)
+    // Right column
+    printCell(display, 1, 1, leftOf("NASDAQ:MSFT", ":") + "\n" + leftOf("yyyy-mm-dd", "-", 1), resultColor)
+    printCell(display, 1, 2, rightOf("NASDAQ:MSFT", ":") + "\n" + rightOf("NASDAQ:MSFT, NASDAQ:TSLA", ":", 1), resultColor)
+// }
+
+

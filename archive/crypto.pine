@@ -1,0 +1,357 @@
+//@version=5
+indicator("HighLow", overlay = true, max_bars_back = 2, max_labels_count = 100)
+//import ivansoft/libhl/11 as lib
+
+// ==========================================================================================
+
+const int MAX_POINTS_SIZE = 10
+
+type AligmentContext
+    int change
+    bool needfix
+emptyAligmentContext() => AligmentContext.new(0, false)
+method timeframeChange(AligmentContext frame, simple string period) =>
+    periodisbigger = timeframe.in_seconds(timeframe.period) < timeframe.in_seconds(period)
+    // aligned by session or by day
+    frame.change := periodisbigger and timeframe.change(period) ? -1 : 0
+    if frame.change != 0
+        frame.needfix := true
+    // aligned always by day
+    if frame.needfix and ta.change(dayofmonth) != 0
+        frame.needfix := false
+        frame.change := 1
+
+type HL
+    varip float high
+    varip float low
+type Point
+    varip chart.point high
+    varip chart.point low
+    varip chart.point open
+    varip chart.point close
+chartPoint() => chart.point.new(na,na,na)
+createPoint() => Point.new(chartPoint(), chartPoint(), chartPoint(), chartPoint())
+type PeriodContext
+    varip Point[] points
+    varip Point curr
+    varip HL max
+    varip float open
+emptyPeriodContext() => PeriodContext.new(array.new<Point>(), createPoint(), HL.new(), na)
+
+method processPointArray(PeriodContext ctx, series bool periodChanged) =>
+    label.new(bar_index, na, "!", yloc = yloc.abovebar, style = label.style_none, textcolor = color.black, size = size.small)
+    // collect data for periods
+    if barstate.isnew  // 1st update
+        // TODO: !!! not called !!!
+        label.new(bar_index, na, "↻", yloc = yloc.abovebar, style = label.style_none, textcolor = color.black, size = size.small)
+        if periodChanged  // 1st bar when period !already! changed
+            // transaction - close 0-bar and immediately add new 0-bar
+            if ctx.points.size() > 0
+                pt0 = ctx.points.get(0)  // update
+                pt0.high := chart.point.new(ctx.curr.high.time, ctx.curr.high.index, ctx.curr.high.price)
+                pt0.low := chart.point.new(ctx.curr.low.time, ctx.curr.low.index, ctx.curr.low.price)
+                pt0.close := chart.point.new(time_close[1], bar_index[1], close[1])
+            ctx.points.unshift(Point.new(
+                  high = na,
+                  low =  na,
+                  open = chart.point.new(time, bar_index, nz(close[1], open)),  // use last close
+                  close = na))
+            // limit size
+            if ctx.points.size() > MAX_POINTS_SIZE
+                ctx.points.pop()
+            // reset for max/min
+            ctx.curr.high.price := high  // 'var' not updated on isnew !
+            ctx.curr.low.price := low    // 'varip' used for 'curr'
+            t = str.format("↻\n{0}\n{1}", ctx.curr.high.price, ctx.curr.low.price)
+            label.new(bar_index, na, t, yloc = yloc.abovebar, style = label.style_none, textcolor = color.black, size = size.small)
+    // protection against updating on every tick (no effect on 'high/low', but important for 'close')
+    if barstate.isconfirmed
+        // update Cursor price
+        ctx.curr.high.price := math.max(nz(ctx.curr.high.price, high), high)  // 'varip' updated every tick
+        ctx.curr.low.price := math.min(nz(ctx.curr.low.price, low), low)      // every tick
+        ttt = str.format("``\n{0}\n{1}\n\n\n\n\n\n\n\n", ctx.curr.high.price, ctx.curr.low.price)
+        label.new(bar_index, na, ttt, yloc = yloc.abovebar, style = label.style_none, textcolor = color.black, size = size.small)
+        //lll.set_text(ttt)
+    // update Cursor time
+    high_changed = ta.change(ctx.curr.high.price) != 0
+    low_changed = ta.change(ctx.curr.low.price) != 0
+    ctx.curr.high.index := high_changed ? bar_index : ctx.curr.high.index
+    ctx.curr.low.index := low_changed ? bar_index : ctx.curr.low.index
+    ctx.curr.high.time := high_changed ? time : ctx.curr.high.time
+    ctx.curr.low.time := low_changed ? time : ctx.curr.low.time
+    // For UI: update 0-point High-Low temporarily
+    if barstate.islastconfirmedhistory or (barstate.isrealtime and barstate.isconfirmed)  // end of history or end of real-time bar
+        if ctx.points.size() > 0
+            pt0 = ctx.points.get(0)
+            pt0.high := chart.point.new(ctx.curr.high.time, ctx.curr.high.index, ctx.curr.high.price)
+            pt0.low := chart.point.new(ctx.curr.low.time, ctx.curr.low.index, ctx.curr.low.price)
+            tt = str.format("`\n{0}\n{1}\n\n\n\n", pt0.high.price, pt0.low.price)
+            label.new(bar_index, na, tt, yloc = yloc.abovebar, style = label.style_none, textcolor = color.black, size = size.small)
+            ///ll.set_text(tt)
+
+method processPlotData(PeriodContext ctx, series bool periodChanged) =>
+    if barstate.isnew  // 1st update (use varip)
+        if periodChanged
+            // for 'style_linebr' only
+            ctx.max.high := na
+            ctx.max.low := na
+            ctx.open := na
+        else
+            // for 'plot' only
+            if ctx.points.size() > 1
+                pt1 = ctx.points.get(1)  // confirmed High-Low
+                ctx.max.high := pt1.high.price  // na(pt1.high) ? na : pt1.high.price
+                ctx.max.low := pt1.low.price  // na(pt1.low) ? na : pt1.low.price
+            if ctx.points.size() > 0
+                pt0 = ctx.points.get(0)
+                ctx.open := pt0.open.price
+
+method process(PeriodContext ctx, series bool periodChanged) =>
+    ctx.processPointArray(periodChanged)
+    ctx.processPlotData(periodChanged)
+
+// ==========================================================================================
+
+// TODO Error
+// https://www.tradingview.com/chart/?solution=43000587849
+// 'Pine cannot determine the referencing length of a series. Try using max_bars_back' error
+
+const string groupName = "Border and fill colors"
+color textColorInput  = input.color(color.new(color.gray, 10), title='Color', inline = "Color", group=groupName)
+color lineColorHighLowInput  = input.color(color.new(color.blue, 35), title='', inline = "Color", group=groupName)
+color lineColorSessionOpenInput  = input.color(color.new(color.green, 35), title='', inline = "Color", group=groupName)
+string textSizeInput  = input.string(size.small, title='Text Size', options = [size.tiny, size.small, size.normal, size.large, size.huge, size.auto], display = display.none, group=groupName)
+int lineWidthInput    = input.int(1, title='Line Width', minval=1, display = display.none, inline = "Line", group=groupName)
+string lineStyleInput = input.string(line.style_dotted, title='', options=[line.style_solid, line.style_dotted], display = display.none, inline = "Line", group=groupName)
+
+const int MAX_BARS_LINE = 15000
+const int SECONDS_IN_DAY = 86400
+const int SECONDS_IN_HOUR = 3600
+const int SECONDS_IN_MINUTE15 = 900
+const int SECONDS_IN_MINUTE30 = 1800
+
+const array<string> periodArray = array.from("S", "5", "10", "D", "W", "M", "12M")
+const array<string> periodTextArray = array.from("session", "min", "min", "day", "week", "month", "year")
+var map<string,string> periodTextMap = map.new<string,string>()
+format_period_time(simple string period, series int ttime) =>
+    switch period
+        "S" => "clearing"
+        "D" => na
+        "W" => str.format_time(ttime, "dd")
+        "M" => str.format_time(ttime, "MMM")
+        "12M" => str.format_time(ttime, "YYYY")
+        => na
+defaultLabelText(simple string period, simple int i) => str.format("{0}{1}", periodTextMap.get(period), i)
+
+var map<string,AligmentContext> tfc = map.new<string,AligmentContext>()
+var map<string,PeriodContext> hl = map.new<string,PeriodContext>()
+
+// Initialization
+if bar_index == 0
+    for key in periodArray
+        hl.put(key, emptyPeriodContext())
+    for i = 1 to periodArray.size() - 1
+        tfc.put(periodArray.get(i), emptyAligmentContext())
+    for i = 0 to periodArray.size() - 1
+        periodTextMap.put(periodArray.get(i), periodTextArray.get(i))
+
+// https://www.moex.com/ru/derivatives/
+const string SESSION_MAIN         = "0000-1850"
+const string SESSION_EVENING      = "1900-2350"
+simple bool isMOEX = syminfo.prefix == "MOEX"
+simple bool isFuture = syminfo.type == "futures"
+simple bool isMoexFuture = isMOEX and isFuture
+timeinrange(simple string period, simple string session_spec) => not na(time(period, session_spec, "Europe/Moscow")) ? 1 : 0
+
+// +1 = new day start
+// -1 = new session start
+//detecttimeinrange() => ta.change(timeinrange(timeframe.period, SESSION_MAIN))
+//detectsessionchange() => ta.change(time("D")) > 0 ? -1 : 0
+//detectdaychange() => ta.change(dayofmonth) != 0 ? 1 : 0
+detectTimeframeChange(simple string period) => tfc.get(period).timeframeChange(period)
+changedBySession(simple string period) => tfc.get(period).change < 0
+changedByDay(simple string period) => tfc.get(period).change > 0
+changedByAny(simple string period) => changedBySession(period) or changedByDay(period)
+
+
+isPointValid(simple string period, simple int i) =>
+    ctx = hl.get(period)
+    pt = ctx.points.size() > i ? ctx.points.get(i) : na
+    valid = not na(pt)
+    [ctx, pt, valid]
+isPointValid0(simple string period, simple int i) =>
+    [ctx, pt, valid] = isPointValid(period, i)
+    valid0 = valid ? not na(pt.high) : false
+    [ctx, pt, valid0]
+isPointConfirmed(simple string period, simple int i) =>
+    [ctx, pt, valid] = isPointValid(period, i)
+    confirmed = valid ? not na(pt.close) : false
+    [ctx, pt, confirmed]
+
+drawlineHL(simple string period, simple int i, simple color color, simple int bar_offset = 50) =>
+    var lineH = line.new(na, na, na, na, xloc = xloc.bar_index, style=line.style_dashed, width = lineWidthInput, color = color)
+    var lineL = line.new(na, na, na, na, xloc = xloc.bar_index, style=line.style_dashed, width = lineWidthInput, color = color)
+    var lblH = label.new(na, na, text = "high "+defaultLabelText(period, i), xloc = xloc.bar_index, yloc = yloc.price, color = textColorInput, size = textSizeInput, textalign = text.align_right, style = label.style_none)
+    var lblL = label.new(na, na, text = "low "+defaultLabelText(period, i), xloc = xloc.bar_index, yloc = yloc.price, color = textColorInput, size = textSizeInput, textalign = text.align_right, style = label.style_none)
+    [ctx, pt, valid] = isPointValid0(period, i)
+    if valid
+        // for min-periods
+        // var int h_line_index = na
+        // var int l_line_index = na
+        h_line_index = timeframe.in_seconds(period) < SECONDS_IN_HOUR ? pt.open.index : pt.high.index
+        l_line_index = timeframe.in_seconds(period) < SECONDS_IN_HOUR ? pt.open.index : pt.low.index
+        // lines
+        lineH.set_xy1(bar_index >= MAX_BARS_LINE ? math.max(h_line_index, MAX_BARS_LINE) : h_line_index, pt.high.price)
+        lineL.set_xy1(bar_index >= MAX_BARS_LINE ? math.max(l_line_index, MAX_BARS_LINE) : l_line_index, pt.low.price)
+        lineH.set_xy2(bar_index + bar_offset, pt.high.price)
+        lineL.set_xy2(bar_index + bar_offset, pt.low.price)
+        // labels
+        lblH.set_xy(bar_index + bar_offset, pt.high.price)
+        lblL.set_xy(bar_index + bar_offset, pt.low.price)
+        if not na(format_period_time(period, pt.high.time))
+            lblH.set_text(str.format("{1} {0}", format_period_time(period, pt.open.time), "high"))
+        if not na(format_period_time(period, pt.low.time))
+            lblL.set_text(str.format("{1} {0}", format_period_time(period, pt.open.time), "low"))
+
+drawline(simple string period, simple int i, simple color color, simple int bar_offset = 50) =>
+    var ln = line.new(na, na, na, na, xloc = xloc.bar_index, style=line.style_dashed, width = lineWidthInput, color = color)
+    var lbl = label.new(na, na, text = defaultLabelText(period, i), xloc = xloc.bar_index, yloc = yloc.price, color = textColorInput, size = textSizeInput, textalign = text.align_right, style = label.style_none)    
+    [ctx, pt, valid] = isPointValid(period, i)
+    if valid
+        // lines
+        ln.set_xy1(bar_index >= MAX_BARS_LINE ? math.max(pt.open.index, MAX_BARS_LINE) : pt.open.index, pt.open.price)
+        ln.set_xy2(bar_index+bar_offset, pt.open.price)
+        // labels
+        lbl.set_xy(bar_index+bar_offset, pt.open.price)
+        lbl.set_xy(bar_index+bar_offset, pt.open.price)
+        if not na(format_period_time(period, pt.open.time))
+            lbl.set_text(format_period_time(period, pt.open.time))
+
+
+if timeframe.isintraday
+    // detect changes for periods
+    detectTimeframeChange("5")
+    detectTimeframeChange("10")
+    detectTimeframeChange("D")
+    detectTimeframeChange("W")
+    detectTimeframeChange("M")
+    detectTimeframeChange("12M")
+
+    // detect High-Low prices
+    hl.get("5").process(changedByAny("5"))
+    //hl.get("10").process(changedByAny("10"))
+    //hl.get("D").process(changedByDay("D"))
+    //hl.get("W").process(changedByDay("W"))
+    //hl.get("M").process(changedByDay("M"))
+    //hl.get("12M").process(changedByDay("12M"))
+    
+    // draw lines
+    drawlineHL("5", 0, color = lineColorHighLowInput, bar_offset = 0)
+    drawlineHL("5", 1, color = lineColorHighLowInput, bar_offset = 0)
+    //drawlineHL("D", 0, color = lineColorHighLowInput, bar_offset = 10)
+    //drawlineHL("D", 1, color = lineColorHighLowInput, bar_offset = 10)
+    //drawlineHL("W", 0, color = lineColorHighLowInput, bar_offset = 30)
+    // drawlineHL("W", 1, color = lineColorHighLowInput, bar_offset = 40)
+    // drawlineHL("W", 2, color = lineColorHighLowInput, bar_offset = 40)
+    // drawlineHL("M", 0, color = lineColorHighLowInput, bar_offset = 60)
+    // drawlineHL("M", 1, color = lineColorHighLowInput, bar_offset = 60)
+    // drawlineHL("M", 2, color = lineColorHighLowInput, bar_offset = 60)
+    // drawlineHL("12M", 0, color = color.red, bar_offset = 80)
+
+    // if isMoexFuture
+    //     hl.get("S").process(changedBySession("D"))
+    //     drawline("S", 0, color = lineColorSessionOpenInput, bar_offset = 20)
+
+
+//plot(hl.get("10").open, style = plot.style_linebr)
+var plotPeriod = timeframe.in_seconds() < SECONDS_IN_MINUTE30 ? "D" : timeframe.in_seconds() < SECONDS_IN_DAY ? "W" : "M"
+plot(hl.get(plotPeriod).max.high, style = plot.style_linebr)
+plot(hl.get(plotPeriod).max.low, style = plot.style_linebr)
+
+
+iscrossedbar(price) => (open <= price and price <= close) or (close <= price and price <= open)
+isinsidebar(price) => (low <= price and price <= high)
+updn() => close > open ? "Up" : close < open ? "Down" : "Same"
+dt(int ttime) => str.format_time(ttime, "HH:mm")
+
+processAlert(simple string period, string txt, simple int i) =>
+    var string message = na
+    [ctx, pt, valid] = isPointValid0(period, i)
+    if valid
+        message := na
+        if iscrossedbar(pt.open.price)
+            if period == "S"
+                message := str.format("clearing {1}->{2}", i, pt.open.price, close)
+        else if iscrossedbar(pt.high.price)
+            if timeframe.in_seconds(period) < SECONDS_IN_HOUR
+                message := str.format("{2} high {0} {1}", str.format_time(pt.open.time, "HH:mm"), pt.high.price, updn())
+            if period == "D"
+                message := str.format("day{0} high {1}->{2}", i, pt.high.price, close)
+            else if period == "W"
+                message := str.format("week{0} high {1}->{2}", str.format_time(pt.open.time, "dd"), pt.high.price, close)
+            else if period == "M"
+                message := str.format("{0} high {1}->{2}", str.format_time(pt.high.time, "MMM"), pt.high.price, close)
+            else if period == "12M"
+                message := str.format("{0} high {1}->{2}", str.format_time(pt.high.time, "YYYY"), pt.high.price, close)
+        else if iscrossedbar(pt.low.price)
+            if timeframe.in_seconds(period) < SECONDS_IN_HOUR
+                message := str.format("{2} low {0} {1}", str.format_time(pt.open.time, "HH:mm"), pt.low.price, updn())
+            if period == "D"
+                message := str.format("day{0} low {1}->{2}", i, pt.low.price, close)
+            else if period == "W"
+                message := str.format("week{0} low {1}->{2}", str.format_time(pt.low.time, "dd"), pt.low.price, close)
+            else if period == "M"
+                message := str.format("{0} low {1}->{2}", str.format_time(pt.low.time, "MMM"), pt.low.price, close)
+            else if period == "12M"
+                message := str.format("{0} low {1}->{2}", str.format_time(pt.low.time, "YYYY"), pt.low.price, close)
+    not na(txt) ? (not na(message) ? message + "; " : "") + txt : message
+
+processAllAlerts() =>
+    var string message = na
+    message := na
+    message := processAlert("10", message, 0)
+    message := processAlert("10", message, 1)
+    if not na(message)
+        alert(message)
+
+if timeframe.isintraday
+    var testLbl = label.new(na,na,"test",yloc=yloc.abovebar,style=label.style_arrowdown)
+    testLbl.set_point(chart.point.now(close))
+    pt0 = hl.get("5").points.size() > 0 ? hl.get("5").points.get(0) : na
+    pt1 = hl.get("5").points.size() > 1 ? hl.get("5").points.get(1) : na
+    testLbl.set_text(str.format(
+          "HL {6,time,HH:mm}-{7,time,HH:mm}\n"+
+          "OC {4,time,HH:mm}-{5,time,HH:mm}\n"+
+          "{3,time,HH:mm}\n"+
+          "{1} {2}\n"+
+          "{8}\n"+
+          "{0}",
+          hl.get("5").points.size(),
+          tfc.get("5").change, tfc.get("5").needfix,
+          na(pt0)?0:pt0.open.time,
+          na(pt1)?0:pt1.open.time, na(pt1)?0:pt1.close.time,
+          na(pt1)?0:pt1.high.time, na(pt1)?0:pt1.low.time,
+          bar_index))
+
+    //if barstate.isrealtime and barstate.isnew
+    //  pt0 = hl.get("10").points.size() > 0 ? hl.get("10").points.get(0) : na
+    //  pt1 = hl.get("10").points.size() > 1 ? hl.get("10").points.get(1) : na
+    //if barstate.islast and barstate.isconfirmed
+    //  testLbl.set_text(str.format(
+    //        "[1] {17} {18}\n"+
+    //        "[0] {15} {16}\n"+
+    //        "H1 {13} {14}\n"+
+    //        "L1 {9} {10}\n"+
+    //        "H0 {11} {12}\n"+
+    //        "L0 {7} {8}\n"+
+    //        "{0,time,MM/dd HH:mm}\n{1,time,MM/dd HH:mm}\n{2}\n"+
+    //        "O{3}\nH{4}\nL{5}\nC{6}",
+    //        time, time_close, bar_index,
+    //        open, high, low, close, // 6+
+    //        hl.get("10").points.get(0).low.price, iscrossedbar(hl.get("10").points.get(0).low.price), 
+    //        hl.get("10").points.get(1).low.price, iscrossedbar(hl.get("10").points.get(1).low.price), 
+    //        hl.get("10").points.get(0).high.price, iscrossedbar(hl.get("10").points.get(0).high.price),
+    //        hl.get("10").points.get(1).high.price, iscrossedbar(hl.get("10").points.get(1).high.price),
+    //        hl.get("10").points.get(0).open.index, hl.get("10").points.get(0).open.index,
+    //        hl.get("10").points.get(1).open.index, hl.get("10").points.get(1).open.index))
+    //processAllAlerts()

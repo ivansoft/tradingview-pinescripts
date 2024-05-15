@@ -1,0 +1,378 @@
+﻿// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © TradingView
+
+//@version=5
+
+// @description This library contains strategy helper functions that assist in various positional calculations such as PnL, percent, ticks, price, or currency.
+
+library("Strategy", true)
+
+
+
+// ———————————————————— Library functions {
+
+
+// @function        Converts a percentage of the supplied price or the average entry price to ticks.
+// @param percent   (series int/float) The percentage of supplied price to convert to ticks. 50 is 50% of the entry price.
+// @param from      (series int/float) A price that can be used to calculate from. Optional. The default value is `strategy.position_avg_price`.
+// @returns         (float) A value in ticks.
+export percentToTicks(series float percent, series float from = strategy.position_avg_price) =>
+    strategy.position_size != 0 ? percent / 100 * from / syminfo.mintick : float(na)
+
+
+// @function        Converts a percentage of the supplied price or the average entry price to a price.
+// @param percent   (series int/float) The percentage of the supplied price to convert to price. 50 is 50% of the supplied price.
+// @param from      (series int/float) A price that can be used to calculate from. Optional. The default value is `strategy.position_avg_price`.
+// @returns         (float) A value in the symbol's quote currency (USD for BTCUSD).
+export percentToPrice(series float percent, series float from = strategy.position_avg_price) =>
+    strategy.position_size != 0 ? (1 + percent / 100) * from : float(na)    
+
+
+// @function        Converts the percentage of a price to money.
+// @param price     (series int/float) The symbol's price.
+// @param percent   (series int/float) The percentage of `price` to calculate.
+// @returns         (float) A value in the symbol's currency.
+export percentToCurrency(series float price, series float percent) =>
+    price * percent / 100 * syminfo.pointvalue
+
+
+// @function        Calculates the profit (as a percentage of the position's `strategy.position_avg_price` entry price) if the trade is closed at `exitPrice`.
+// @param exitPrice (series int/float) The potential price to close the position. 
+// @returns         (float) Percentage profit for the current position if closed at the `exitPrice`.
+export percentProfit(series float exitPrice) =>
+    if strategy.position_size != 0
+        (exitPrice - strategy.position_avg_price) / strategy.position_avg_price * math.sign(strategy.position_size) * 100
+    else
+        float(na)
+
+
+// @function        Converts a price to ticks.
+// @param price     (series int/float) Price to convert to ticks.
+// @returns         (float) A quantity of ticks.
+export priceToTicks(series float price) =>
+    price / syminfo.mintick
+
+
+// @function        Converts ticks to a price offset from the supplied price or the average entry price.
+// @param ticks     (series int/float) Ticks to convert to a price.
+// @param from      (series int/float) A price that can be used to calculate from. Optional. The default value is `strategy.position_avg_price`.
+// @returns         (float) A price level that has a distance from the entry price equal to the specified number of ticks.
+export ticksToPrice(series float ticks, series float from = strategy.position_avg_price) =>
+    float offset = ticks * syminfo.mintick 
+    strategy.position_size != 0 ? from + offset : float(na)
+    
+
+// @function        Converts ticks to money.
+// @param ticks     (series int/float) Number of ticks.
+// @returns         (float) Money amount in the symbol's currency.
+export ticksToCurrency(series float ticks) =>
+    ticks * syminfo.mintick * syminfo.pointvalue
+
+
+// @function        Calculates a stop loss level using a distance in ticks from the current `strategy.position_avg_price` entry price. This value can be plotted on the chart, or used as an argument to the `stop` parameter of a `strategy.exit()` call. NOTE: The stop level automatically flips based on whether the position is long or short.
+// @param ticks     (series int/float) The distance in ticks from the entry price to the stop loss level.
+// @returns         (float) A stop loss level for the current position.
+export ticksToStopLevel(series float ticks) =>
+    ticksToPrice(-ticks * math.sign(strategy.position_size)) 
+
+
+// @function        Calculates a take profit level using a distance in ticks from the current `strategy.position_avg_price` entry price.  This value can be plotted on the chart, or used as an argument to the `limit` parameter of a `strategy.exit()` call. NOTE: The take profit level automatically flips based on whether the position is long or short.
+// @param ticks     (series int/float) The distance in ticks from the entry price to the take profit level.
+// @returns         (float) A take profit level for the current position.
+export ticksToTpLevel(series float ticks) =>
+    ticksToPrice(ticks * math.sign(strategy.position_size))
+
+
+// @function            Calculates the position size needed to implement a given stop loss (in ticks) corresponding to `riskPercent` of equity.
+// @param stopLossTicks (series int) The stop loss (in ticks) that will be used to protect the position.
+// @param riskPercent   (series int/float) The maximum risk level as a percent of current equity (`strategy.equity`).
+// @returns             (int) A quantity of contracts.
+export calcPositionSizeByStopLossTicks(series int stopLossTicks, series float riskPercent) =>
+    float risk = strategy.equity * riskPercent / 100
+    math.floor(risk / ticksToCurrency(stopLossTicks))
+
+
+// @function                Calculates the position size needed to implement a given stop loss (%) corresponding to `riskPercent` of equity.
+// @param stopLossPercent   (series int/float) The stop loss in percent that will be used to protect the position.
+// @param riskPercent       (series int/float) The maximum risk level as a percent of current equity (`strategy.equity`).
+// @param entryPrice        (series int/float) The entry price of the position. 
+// @returns                 (int) A quantity of contracts.
+export calcPositionSizeByStopLossPercent(series float stopLossPercent, series float riskPercent, series float entryPrice = close) =>
+    float risk = strategy.equity * riskPercent / 100
+    math.floor(risk / percentToCurrency(entryPrice, stopLossPercent))
+
+
+
+// @function             A wrapper of the `strategy.exit()` built-in which adds the possibility to specify loss & profit as a value in percent. NOTE: this function may work incorrectly with pyramiding turned on due to the use of `strategy.position_avg_price` in its calculations of stop loss and take profit offsets.
+// @param id             (series string)    The order identifier of the `strategy.exit()` call. 
+// @param lossPercent    (series int/float) Stop loss as a percent of the entry price. 
+// @param profitPercent  (series int/float) Take profit as a percent of the entry price. 
+// @param qty            (series int/float) Number of contracts/shares/lots/units to exit a trade with. Optional. The default value is `na`. 
+// @param qtyPercent     (series int/float) The percent of the position's size to exit a trade with.  If `qty` is `na`, the default value of `qty_percent` is 100.
+// @param comment        (series string)    Optional. Additional notes on the order.
+// @param when           (series bool)      Condition of the order. The order is placed if it is true. 
+// @param alertMessage   (series string)    An optional parameter which replaces the {{strategy.order.alert_message}} placeholder when it is used in the "Create Alert" dialog box's "Message" field.
+// @returns              (void) 
+export exitPercent(series string id               = "Exit", 
+                   series float  lossPercent              , 
+                   series float  profitPercent            , 
+                   series float  qty              = na    , 
+                   series float  qtyPercent       = na    , 
+                   series string comment          = na    , 
+                   series bool   when             = true  , 
+                   series string alertMessage     = na    ) =>
+    strategy.exit(id, qty = qty, qty_percent = qtyPercent, loss = math.ceil(percentToTicks(lossPercent)), profit = math.round(percentToTicks(profitPercent)), comment = comment, when = when, alert_message = alertMessage)
+
+
+// @function             A wrapper of the `strategy.exit()` built-in which adds the possibility to specify loss & profit as a value in ticks. 
+// @param id             (series string)    The order identifier of the `strategy.exit()` call. 
+// @param lossTicks      (series int/float) Loss in ticks.  
+// @param profitTicks    (series int/float) Profit in ticks. 
+// @param qty            (series int/float) Number of contracts/shares/lots/units to exit a trade with. Optional. The default value is `na`. 
+// @param qtyPercent     (series int/float) The percent of the position's size to exit a trade with.  If `qty` is `na`, the default value of `qty_percent` is 100.
+// @param comment        (series string)    Optional. Additional notes on the order.
+// @param when           (series bool)      Condition of the order. The order is placed if it is true. 
+// @param alertMessage   (series string)    An optional parameter which replaces the {{strategy.order.alert_message}} placeholder when it is used in the "Create Alert" dialog box's "Message" field.
+// @returns              (void) 
+export exitTicks(series string id               = "Exit", 
+                 series float  lossTicks                , 
+                 series float  profitTicks              , 
+                 series float  qty              = na    , 
+                 series float  qtyPercent       = na    , 
+                 series string comment          = na    , 
+                 series bool   when             = true  , 
+                 series string alertMessage     = na    ) =>
+    strategy.exit(id, qty = qty, qty_percent = qtyPercent, loss = lossTicks * syminfo.mintick, profit = profitTicks * syminfo.mintick, comment = comment, when = when, alert_message = alertMessage)
+    
+
+// @function             A wrapper of the `strategy.close_all()` built-in which closes all positions on the close of the last bar of the trading session. 
+// @param comment        (series string) Optional. Additional notes on the order.
+// @param alertMessage   (series string) An optional parameter which replaces the {{strategy.order.alert_message}} placeholder when it is used in the "Create Alert" dialog box's "Message" field.
+// @returns              (void) Closes all positions on the `close` of the last bar of the trading session, instead of the `open` of the next session. 
+export closeAllAtEndOfSession(series string comment = na, series string alertMessage = na) =>
+    if session.islastbar and barstate.isconfirmed
+        strategy.close_all(comment = comment, alert_message = alertMessage, immediately = true)
+
+
+// @function             A wrapper of the `strategy.close()` built-in which closes the position matching the `entryId` on the close of the last bar of the trading session. 
+// @param entryId        (series string) A required parameter. The order identifier. It is possible to close an order by referencing its identifier.
+// @param comment        (series string) Optional. Additional notes on the order.
+// @param alertMessage   (series string) An optional parameter which replaces the {{strategy.order.alert_message}} placeholder when it is used in the "Create Alert" dialog box's "Message" field.
+// @returns              (void) Closes `entryId` on the `close` of the last bar of the trading session, instead of the `open` of the next session. 
+export closeAtEndOfSession(series string entryId, series string comment = na, series string alertMessage = na) =>
+    if session.islastbar and barstate.isconfirmed
+        strategy.close(entryId, comment, alert_message = alertMessage, immediately = true)
+
+
+days(series int t) =>
+    int result = math.floor(t / 86400000.0 + 2440587.5)
+
+
+months(series int t) =>
+    int result = year(t) * 12 + month(t)
+
+
+numberOfPeriodsInYear(series bool useMonths) =>
+    int result = useMonths ? 12 : 365
+
+    
+numberOfPeriods(series int prevT, series int curT, series bool useMonths) =>
+    int result = useMonths ? (months(curT) - months(prevT)) : (days(curT) - days(prevT))
+
+
+addPeriodsReturns(series int prevTime, series int xTime, series float profit, series bool useMonths, series float[] periodsReturn) =>
+    int periods =  numberOfPeriods(prevTime, xTime, useMonths)
+    if periods > 0
+        for j = 0 to periods - 1
+            array.push(periodsReturn, 0)
+    if array.size(periodsReturn) == 0
+        array.push(periodsReturn, 0)
+    int lastIdx = array.size(periodsReturn) - 1
+    float periodProfit = array.get(periodsReturn, lastIdx) + profit
+    array.set(periodsReturn, lastIdx, periodProfit)
+    int result = xTime
+
+    
+interestRatePerPeriod(series float interestRateYearlyPercent, series bool useMonths) =>
+    float result = interestRateYearlyPercent / numberOfPeriodsInYear(useMonths) / 100
+
+
+periodsReturnsPercent(series bool useMonths) =>
+    float[] periodsReturn = array.new<float>()
+    
+    if strategy.closedtrades > 0
+        int prevTime = strategy.closedtrades.entry_time(0)
+        for i = 0 to strategy.closedtrades - 1
+            prevTime := addPeriodsReturns(prevTime, strategy.closedtrades.exit_time(i), strategy.closedtrades.profit(i), useMonths, periodsReturn)
+            
+    if strategy.opentrades > 0
+        for i = 0 to strategy.opentrades - 1
+            int prevTime = strategy.opentrades.entry_time(0)
+            addPeriodsReturns(prevTime, time, strategy.opentrades.profit(i), useMonths, periodsReturn)
+    
+    while array.size(periodsReturn) > 0
+        if array.get(periodsReturn, array.size(periodsReturn) - 1) == 0
+            array.pop(periodsReturn)
+        else
+            break
+    
+    float[] periodsReturnPercent = array.new<float>()
+    float cum = strategy.initial_capital
+    for pR in periodsReturn
+        float pp = cum == 0 ? 0 : pR / cum
+        cum += pR
+        array.push(periodsReturnPercent, pp)
+        
+    float[] result = periodsReturnPercent
+
+
+downsideDeviation(float[] returns, series float targetReturn) =>
+    int count = 0
+    float sum = 0
+    for r in returns
+        float rr = math.min(0, r - targetReturn)
+        sum += rr * rr
+        count += 1
+    sum /= count
+    float result = 0 < sum ? math.sqrt(sum) : na
+
+    
+sortinoRatioImpl(series bool useMonths, simple float interestRate) =>
+    float[] periodsReturnPcnt = periodsReturnsPercent(useMonths)
+    float minRateOfReturn = interestRatePerPeriod(interestRate, useMonths)
+    float dd = downsideDeviation(periodsReturnPcnt, minRateOfReturn)
+    if not na(dd)
+        float avgPP = array.avg(periodsReturnPcnt)
+        float result = not na(avgPP) ? (avgPP - minRateOfReturn) / dd : na
+    else
+        na
+  
+
+sharpeRatioImpl(series bool useMonths, simple float interestRate) =>
+    float[] periodsReturnPcnt = periodsReturnsPercent(useMonths)
+    float minRateOfReturn = interestRatePerPeriod(interestRate, useMonths)
+    float stdev = array.stdev(periodsReturnPcnt)
+    if not na(stdev)
+        float avgPP = array.avg(periodsReturnPcnt)
+        float result = not na(avgPP) ? (avgPP - minRateOfReturn) / stdev : na
+    else
+        na
+
+
+detectPeriod() =>
+    int start = strategy.closedtrades > 0 ? strategy.closedtrades.entry_time(0) : strategy.opentrades > 0 ? strategy.opentrades.entry_time(0) : int(na)
+    int end = strategy.opentrades > 0 ? time_close : strategy.closedtrades > 0 ? strategy.closedtrades.exit_time(strategy.closedtrades - 1) : int(na)
+    if not(na(start) or na(end))
+        int daysDiff = days(end) - days(start)
+        int monthsDiff = math.floor(daysDiff/30)
+        bool result = monthsDiff > 2 ? true : daysDiff > 2 ? false : bool(na)
+
+
+// @function            Calculates the Sortino Ratio for the trading period. 
+// @param interestRate  (simple int/float) The benchmark "risk-free" rate of return to compare strategy risk against in the ratio. 
+// @param forceCalc     (series bool) When `true`, forces a recalculation on each bar. Optional. The default is `false`, whereby calculations are performed only on the last bar, for efficiency.
+// @returns             (float) The Sortino Ratio. Useful for measuring the risk-adjusted return of a strategy, taking into account only drawdowns. 
+export sortinoRatio(simple float interestRate = 2.0, series bool forceCalc = false) =>
+    if barstate.islastconfirmedhistory or barstate.islast or forceCalc
+        bool useMonths = detectPeriod()
+        float result = not na(useMonths) ? sortinoRatioImpl(useMonths, interestRate) : na
+    
+
+// @function            Calculates the Sharpe Ratio for the trading period. 
+// @param interestRate  (simple int/float) The benchmark "risk-free" rate of return to compare strategy risk against in the ratio. 
+// @param forceCalc     (series bool) When `true`, forces a recalculation on each bar. Optional. The default is `false`, whereby calculations are performed only on the last bar, for efficiency.
+// @returns             (float) The Sharpe Ratio. Useful for measuring the risk-adjusted return of a strategy, taking into account both run-ups and drawdowns.
+export sharpeRatio(simple float interestRate = 2.0, series bool forceCalc = false) =>
+    if barstate.islastconfirmedhistory or barstate.islast or forceCalc
+        bool useMonths = detectPeriod()
+        float result = not na(useMonths) ? sharpeRatioImpl(useMonths, interestRate) : na
+// }
+
+
+
+// ———————————————————— Example code {
+
+
+// —————————— Calculations
+
+// Inputs for stop and limit orders in percent.
+float percentStop = input.float(1.0, "Percent Stop",  minval = 0.0, step = 0.25, group = "Exit Orders")
+float percentTP   = input.float(2.0, "Percent Limit", minval = 0.0, step = 0.25, group = "Exit Orders")
+
+// Using the input stop/ limit percent, we can convert to ticks and use the ticks to level functions.
+// This can be used to calculate the take profit and stop levels.
+float sl = ticksToStopLevel (percentToTicks (percentStop))
+float tp = ticksToTpLevel   (percentToTicks (percentTP))  
+
+// Conditions used to reference position and determine trade bias
+bool long       = strategy.position_size > 0
+bool short      = strategy.position_size < 0
+bool enterLong  = long  and not long [1]
+bool enterShort = short and not short[1]
+bool enter      = enterLong or enterShort
+bool exit       = strategy.position_size == 0 and not (strategy.position_size == 0)[1]
+
+// Condition to flip labels based on trade bias.
+string stopStyle  = short ? label.style_label_up : label.style_label_down
+string limitStyle = long  ? label.style_label_up : label.style_label_down
+
+// Used to determine the exit price to draw an arrow for stop and limit exits
+// and determine a color for the arrow (fuchsia for stop exits, lime for limits).
+// We can use the trade bias as a multiplier to invert the condition for short trades.
+exitPrice = strategy.closedtrades.exit_price(strategy.closedtrades-1)
+bias      = math.sign(strategy.position_size)
+avg       = strategy.position_avg_price
+
+plotCol = exitPrice * bias[1] < avg[1] * bias[1] ? color.fuchsia : color.lime
+
+
+// —————————— Strategy Calls
+
+// Calculate two moving averages.
+float maFast = ta.sma(close, 10)
+float maSlow = ta.sma(close, 30)
+
+// Create cross conditions for the averages.
+bool longCondition  = ta.crossover(maFast, maSlow)
+bool shortCondition = ta.crossunder(maFast, maSlow)
+
+// Create entries based on the cross conditions for both trades biases.
+if longCondition
+    strategy.entry("My Long Entry Id", strategy.long)
+if shortCondition
+    strategy.entry("My Short Entry Id", strategy.short)
+
+// Create a hard exit level for a take profit and stop loss.
+// Using the `strategy.exit` wrapper function, we can simply specify the percent stop and limit using the input variables.
+exitPercent("exit", percentStop, percentTP)
+// Another option is to use the "ticksToLevel" functions with the percent to ticks functions to convert percent directly to the stop or limit level:
+// strategy.exit("exit", stop = ticksToStopLevel (percentToTicks (percentStop)), limit = ticksToTpLevel (percentToTicks (percentTP)), comment = "exit")
+
+
+// —————————— Plots
+
+// Plot the entry level.
+plot(strategy.position_avg_price, "strategy.position_avg_price", not enter ? color.new(color.orange, 60) : na, 2, plot.style_linebr)
+
+// Plot the exit levels.
+plot(sl, "Stop2", not enter ? color.new(color.fuchsia, 60) : na, 6, plot.style_linebr)
+plot(tp, "TP2"  , not enter ? color.new(color.green,   60) : na, 6, plot.style_linebr)
+
+// Plot an entry tag for both directions
+plotshape(enterLong,  "longCondition",  shape.arrowup,   location.belowbar, color.new(color.green,   30), text = "Long")
+plotshape(enterShort, "shortCondition", shape.arrowdown, location.abovebar, color.new(color.fuchsia, 30), text = "Short")
+
+// Plot and arrow for stop or limit exits at the trade exit price. We use the price and the color from above.  
+plotchar(exit ? exitPrice : na, "Exit Arrow", "◄", location.absolute, color.new(plotCol, 20))
+
+// Plot labels using the percentProfit() functions to display the distance from entry to the level for the current trade
+label labLimit = label.new(bar_index, sl, str.tostring(percentProfit(sl), format.percent), color = color.new(color.red,   70), style = limitStyle, textcolor = color.white)
+label labStop  = label.new(bar_index, tp, str.tostring(percentProfit(tp), format.percent), color = color.new(color.green, 70), style = stopStyle,  textcolor = color.white)
+// We delete the labels drawn one bar ago, or we end up with many labels drawn 
+label.delete(labLimit[1])
+label.delete(labStop [1])
+
+// Show ratios in indicator values and the Data Window.
+plotchar(sortinoRatio(2.0), "Sortino", "", location.top, size = size.tiny)
+plotchar(sharpeRatio(2.0),  "Sharpe", "", location.top, size = size.tiny)
+// }
