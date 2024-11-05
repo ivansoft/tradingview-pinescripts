@@ -163,6 +163,7 @@ if barstate.isfirst  //                        B  M
     alertLevelsT24_2   .put("RUS:ROSN:3600",  12000000000)
     alertLevelsT24_3   .put("RUS:ROSN:3600",  16500000000)
     alertLevelsP       .put("RUS:ROSN:3600",          300)
+    alertLevelsLP      .put("RUS:ROSN",               300)
 
 if barstate.isfirst  //                        B  M
     alertLevelsL       .put("RUS:MX1!",        1000000000)
@@ -376,30 +377,30 @@ bars_isNewDay = ta.barssince(ta.change(dayofweek) != 0)  // [ 0, 1, ... ]
 //bars_inSession = ta.barssince(ta.change(ismoextime))
 //log.info("[{0}] {1} {2} {3}", bar_index, ta.max(bars_isNewDay), ta.max(bars_isNewWeek), ta.max(bars_inSession))
 
-avgPrevDay() =>
-    var prevDayBarsCount = 0
-    var prevSessionBarsCount = 0
-    var prevDayValue = 0.
-    var prevSessionValue = 0.
-    var dayBarsCount = 0
-    var sessionBarsCount = 0
-    var dayValue = 0.
-    var sessionValue = 0.
-    if bars_isNewDay == 0
-        prevDayBarsCount := dayBarsCount
-        prevSessionBarsCount := sessionBarsCount
-        prevDayValue := dayValue
-        prevSessionValue := sessionValue
-        dayBarsCount := 1
-        dayValue := 0
-        sessionBarsCount := ismoextime ? 1 : 0
-        sessionValue := 0
-    else
-        dayBarsCount := dayBarsCount + 1
-        dayValue := dayValue+val
-        sessionBarsCount := ismoextime ? sessionBarsCount+1 : sessionBarsCount
-        sessionValue := ismoextime ? sessionValue+val : sessionValue
-    prevDayValue/prevDayBarsCount
+//avgPrevDay() =>
+var prevDayBarsCount = 1
+var prevSessionBarsCount = 0
+var prevDayValue = 0.
+var prevSessionValue = 0.
+var dayBarsCount = 1
+var sessionBarsCount = 0
+var dayValue = 0.
+var sessionValue = 0.
+if bars_isNewDay == 0
+    prevDayBarsCount := dayBarsCount
+    prevSessionBarsCount := sessionBarsCount
+    prevDayValue := dayValue
+    prevSessionValue := sessionValue
+    dayBarsCount := 1
+    dayValue := 0
+    sessionBarsCount := ismoextime ? 1 : 0
+    sessionValue := 0
+else
+    dayBarsCount := dayBarsCount + 1
+    dayValue := dayValue+val
+    sessionBarsCount := ismoextime ? sessionBarsCount+1 : sessionBarsCount
+    sessionValue := ismoextime ? sessionValue+val : sessionValue
+ //   prevDayValue/prevDayBarsCount
 
 //val1d = math.sum(val, nz(bars_isNewDay)+1)
 //val1w = math.sum(val, nz(bars_isNewWeek)+1)
@@ -413,7 +414,11 @@ avgPrevDay() =>
 
 var levellp = alertLevelsLP.get(tickerid)
 var levelp = isdebugtf ? levellp : alertLevelsP.get(tickerkey)
-avg = avgPrevDay()
+//avg = prevDayValue/prevDayBarsCount
+//avg = ta.sma(val,prevDayBarsCount)
+//avg = ta.wma(val,prevDayBarsCount)
+avg1d = ta.sma(val,prevDayBarsCount)
+avg = math.max(ta.sma(val,math.min(dayBarsCount,15)),avg1d*0.5)
 roc_avg = (val-avg)/avg * 100
 roc_val = ta.roc(val, 1)
 isbigp = roc_avg > levelp and roc_val > 5
@@ -421,7 +426,10 @@ isbigp = roc_avg > levelp and roc_val > 5
 //    debugLabelUp( str.format("{0}:{1}:{2}\n{3,number,#}%\n{4,number,#}%\n{5}", bars1D, prevSessionBarsCount, prevDayBarsCount, roc_avg, roc_val, bars_inSession))
 plot(showBarsHtf1DOpt ? avg + avg*levelp/100 : na, color=color.new(color.blue, 50), style=plot.style_stepline, title="levelp")
 
-avgl = request.security_lower_tf(tickerid, periodltf, avgPrevDay())
+//avgl = request.security_lower_tf(tickerid, periodltf, avgPrevDay())
+//avgsma = ta.sma(val,prevDayBarsCount)
+//plot(showBarsHtf1DOpt ? avgsma + avgsma*levelp/100 : na, color=color.new(color.blue, 50), style=plot.style_stepline, title="levelpS")
+
 
 //
 // bgcolor 'in the past' logic
