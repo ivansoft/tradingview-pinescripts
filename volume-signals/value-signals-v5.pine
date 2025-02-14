@@ -1,0 +1,650 @@
+// This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © ivansoft
+
+//@version=5
+indicator("Value", overlay=false, format=format.volume)
+//plot(volume*hl2, color=color.new(color.gray, 50), style=plot.style_columns, title="Volume Value")
+
+defaultAllInput = input.bool(true, "Invert On/Off All Inputs")
+showBarsInput = input.bool(true, "Values", inline = "0")
+showLevelsBarsInput = input.bool(true, "Levels Show Bars", inline = "0")
+showBarsHtf1DInput = input.bool(true, "1D", inline = "00")
+showBarsHtf1WInput = input.bool(true, "1W Show Bars Higher TF", inline = "00")
+showCumsumBarsInput = input.bool(true, "Bars", inline = "01")
+showCumsum8Input    = input.bool(true, "8", inline = "01")
+showCumsum24Input   = input.bool(true, "24", inline = "01")
+showCumsum48Input   = input.bool(true, "48", inline = "01")
+showCumsumLtfInput   = input.bool(true, "LTF Show Cumulative volumes", inline = "01")
+showExtraLevelsBarsInput = input.bool(true, "Bars", inline = "02")
+showExtraLevels8Input    = input.bool(true, "8", inline = "02")
+showExtraLevels24Input   = input.bool(true, "24", inline = "02")
+showExtraLevels48Input   = input.bool(true, "48 Show Extra levels", inline = "02")
+showBarsOpt = showBarsInput
+showLevelsBarsOpt = defaultAllInput ? showLevelsBarsInput : not showLevelsBarsInput
+showBarsHtf1DOpt = defaultAllInput ? showBarsHtf1DInput : not showBarsHtf1DInput
+showBarsHtf1WOpt = defaultAllInput ? showBarsHtf1WInput : not showBarsHtf1WInput
+showCumsumBarsOpt = defaultAllInput ? showCumsumBarsInput : not showCumsumBarsInput
+showCumsum8Opt = defaultAllInput ? showCumsum8Input : not showCumsum8Input
+showCumsum24Opt = defaultAllInput ? showCumsum24Input : not showCumsum24Input
+showCumsum48Opt = defaultAllInput ? showCumsum48Input : not showCumsum48Input
+showCumsumLtfOpt = defaultAllInput ? showCumsumLtfInput : not showCumsumLtfInput
+showExtraLevelsBarsOpt = defaultAllInput ? showExtraLevelsBarsInput : not showExtraLevelsBarsInput
+showExtraLevels8Opt = defaultAllInput ? showExtraLevels8Input : not showExtraLevels8Input
+showExtraLevels24Opt = defaultAllInput ? showExtraLevels24Input : not showExtraLevels24Input
+showExtraLevels48Opt = defaultAllInput ? showExtraLevels48Input : not showExtraLevels48Input
+
+
+debugLabelUp(txt,overlay=true) => label.new(bar_index, high, txt, yloc = yloc.abovebar, style = label.style_arrowdown, force_overlay = overlay)
+debugLabelDn(txt,overlay=true) => label.new(bar_index, low, txt, yloc = yloc.belowbar, style = label.style_arrowup, force_overlay = overlay)
+
+var tickerid = ticker.standard(syminfo.tickerid)
+var tickerkey = tickerid +":"+ str.tostring(timeframe.in_seconds())
+var periodltf = timeframe.from_seconds(timeframe.in_seconds() < 180 ? timeframe.in_seconds() : 180)
+var isdebugtf = timeframe.in_seconds() <= 180
+
+// single bars
+var alertLevels = map.new<string,float>()
+var alertLevelsHuge = map.new<string,float>()
+var alertLevelsP = map.new<string,float>()
+// bars from lower timeframe 
+var alertLevelsL = map.new<string,float>()
+var alertLevelsLH = map.new<string,float>()
+var alertLevelsLP = map.new<string,float>()
+// cumulative value(s)
+var alertLevelsT8 = map.new<string,float>()
+var alertLevelsT24 = map.new<string,float>()
+var alertLevelsT48 = map.new<string,float>()
+// extra
+//var alertLevelsL_2 = map.new<string,float>()
+var alertLevelsH_2 = map.new<string,float>()
+var alertLevelsLH_2 = map.new<string,float>()
+var alertLevelsT8_2 = map.new<string,float>()
+var alertLevelsT8_3 = map.new<string,float>()
+var alertLevelsT8_4 = map.new<string,float>()
+var alertLevelsT8_5 = map.new<string,float>()
+var alertLevelsT24_2 = map.new<string,float>()
+var alertLevelsT24_3 = map.new<string,float>()
+var alertLevelsT24_4 = map.new<string,float>()
+var alertLevelsT24_5 = map.new<string,float>()
+var alertLevelsT48_2 = map.new<string,float>()
+var alertLevelsT48_3 = map.new<string,float>()
+var alertLevelsT48_4 = map.new<string,float>()
+
+//if barstate.isfirst
+//    log.info("syminfo.pricescale {0}", math.log10(syminfo.pricescale))
+var _strPriceScale = str.repeat("#",math.ceil(math.log10(syminfo.pricescale)))
+strPrice(v) =>
+    str.format("{0,number,"+"#."+_strPriceScale+"}",v)
+strVolume(v) =>
+    vm = v /    1000000
+    vb = v / 1000000000
+    //vm < 1000 ? str.format("{0,number,integer}M", vm) : str.format("{0,number,integer}B", vb)
+    //str.format("{0,number,integer}M", vm)
+    vm > 1000 ? str.format("{0}B", vb) : str.format("{0}M", vb)
+strUpDn(v) => v > 0 ? "Up" : v < 0 ? "Dn" : "Flat"
+
+if barstate.isfirst  //                         B  M
+    alertLevelsL       .put("RUS:SBER",         500000000)
+    alertLevelsLH      .put("RUS:SBER",        1200000000)
+    alertLevelsLH_2    .put("RUS:SBER",        1500000000)
+    alertLevels        .put("RUS:SBER:3600",   5000000000)
+    alertLevelsHuge    .put("RUS:SBER:3600",  12000000000)
+    alertLevelsH_2     .put("RUS:SBER:3600",  19000000000)
+    alertLevelsT8      .put("RUS:SBER:3600",  20000000000)
+    alertLevelsT8_2    .put("RUS:SBER:3600",  30000000000)
+    alertLevelsT8_3    .put("RUS:SBER:3600",  40000000000)
+    alertLevelsT8_4    .put("RUS:SBER:3600",  50000000000)
+    alertLevelsT8_5    .put("RUS:SBER:3600",  60000000000)
+    alertLevelsT24     .put("RUS:SBER:3600",  40000000000)
+    alertLevelsT24_2   .put("RUS:SBER:3600",  60000000000)
+    alertLevelsT24_3   .put("RUS:SBER:3600",  80000000000)
+    alertLevelsT48     .put("RUS:SBER:3600",  60000000000)
+    alertLevelsT48_2   .put("RUS:SBER:3600", 100000000000)
+    alertLevelsT48_3   .put("RUS:SBER:3600", 130000000000)
+    alertLevelsP       .put("RUS:SBER:3600",          300)
+
+if barstate.isfirst  //                        B  M
+    alertLevelsL       .put("RUS:EQMX",          20000000)
+    alertLevelsLH      .put("RUS:EQMX",          40000000)
+    alertLevels        .put("RUS:EQMX:3600",     80000000)
+    alertLevelsHuge    .put("RUS:EQMX:3600",    125000000)
+    alertLevelsH_2     .put("RUS:EQMX:3600",    160000000)
+    alertLevelsT8      .put("RUS:EQMX:3600",    200000000)
+    alertLevelsT8_2    .put("RUS:EQMX:3600",    250000000)
+    alertLevelsT8_3    .put("RUS:EQMX:3600",    300000000)
+    alertLevelsT8_4    .put("RUS:EQMX:3600",    350000000)
+    alertLevelsT8_5    .put("RUS:EQMX:3600",    400000000)
+    alertLevelsT24     .put("RUS:EQMX:3600",    300000000)
+    alertLevelsT24_2   .put("RUS:EQMX:3600",    400000000)
+    alertLevelsT24_3   .put("RUS:EQMX:3600",    475000000)
+    alertLevelsT24_4   .put("RUS:EQMX:3600",    550000000)
+    alertLevelsT24_5   .put("RUS:EQMX:3600",    650000000)
+    alertLevelsT48     .put("RUS:EQMX:3600",    600000000)
+    alertLevelsT48_2   .put("RUS:EQMX:3600",    800000000)
+    alertLevelsT48_3   .put("RUS:EQMX:3600",   1000000000)
+    alertLevelsT48_4   .put("RUS:EQMX:3600",   1200000000)
+    alertLevelsP       .put("RUS:EQMX:3600",          300)
+
+if barstate.isfirst  //                        B  M
+    alertLevelsL       .put("RUS:LQDT",        1000000000)
+    alertLevelsLH      .put("RUS:LQDT",        2000000000)
+    alertLevelsLH_2    .put("RUS:LQDT",        3000000000)
+    alertLevels        .put("RUS:LQDT:3600",   2000000000)
+    alertLevelsHuge    .put("RUS:LQDT:3600",   4000000000)
+    alertLevelsT8      .put("RUS:LQDT:3600",  10000000000)
+    alertLevelsT24     .put("RUS:LQDT:3600",  20000000000)
+    alertLevelsT24_2   .put("RUS:LQDT:3600",  25000000000)
+    alertLevelsT24_3   .put("RUS:LQDT:3600",  30000000000)
+    alertLevelsT48     .put("RUS:LQDT:3600",  40000000000)
+    alertLevelsT48_2   .put("RUS:LQDT:3600",  50000000000)
+    alertLevelsP       .put("RUS:LQDT:3600",          300)
+
+if barstate.isfirst  //                        B  M
+    alertLevelsL       .put("RUS:LKOH",         500000000)
+    alertLevelsLH      .put("RUS:LKOH",        1000000000)
+    alertLevels        .put("RUS:LKOH:3600",   3500000000)
+    alertLevelsHuge    .put("RUS:LKOH:3600",   7000000000)
+    alertLevelsT8      .put("RUS:LKOH:3600",  15000000000)
+    alertLevelsT8_2    .put("RUS:LKOH:3600",  20000000000)
+    alertLevelsT8_3    .put("RUS:LKOH:3600",  25000000000)
+    alertLevelsT8_4    .put("RUS:LKOH:3600",  30000000000)
+    alertLevelsT24     .put("RUS:LKOH:3600",  30000000000)
+    alertLevelsP       .put("RUS:LKOH:3600",          250)
+
+if barstate.isfirst  //                        B  M
+    alertLevelsL       .put("RUS:ROSN",          90000000)
+//  alertLevelsL_2     .put("RUS:ROSN",         100000000)
+    alertLevelsLH      .put("RUS:ROSN",         200000000)
+//  alertLevelsLH_2    .put("RUS:ROSN",         250000000)
+    alertLevels        .put("RUS:ROSN:3600",   1000000000)
+    alertLevelsHuge    .put("RUS:ROSN:3600",   2000000000)
+    alertLevelsT8      .put("RUS:ROSN:3600",   3000000000)
+    alertLevelsT24     .put("RUS:ROSN:3600",   7500000000)
+    alertLevelsT24_2   .put("RUS:ROSN:3600",  12000000000)
+    alertLevelsT24_3   .put("RUS:ROSN:3600",  16500000000)
+    alertLevelsP       .put("RUS:ROSN:3600",          300)
+
+if barstate.isfirst  //                        B  M
+    alertLevelsL       .put("RUS:MX1!",        1000000000)
+    alertLevelsLH      .put("RUS:MX1!",        2000000000)
+    alertLevelsLH_2    .put("RUS:MX1!",        5000000000)
+    alertLevels        .put("RUS:MX1!:3600",   7500000000)
+    alertLevelsHuge    .put("RUS:MX1!:3600",  11250000000)
+    alertLevelsH_2     .put("RUS:MX1!:3600",  15000000000)
+    alertLevelsT8      .put("RUS:MX1!:3600",  50000000000)
+    alertLevelsT24     .put("RUS:MX1!:3600", 100000000000)
+    alertLevelsT48     .put("RUS:MX1!:3600", 150000000000)
+    alertLevelsT48_2   .put("RUS:MX1!:3600", 175000000000)
+    alertLevelsP       .put("RUS:MX1!:3600",          300)
+    alertLevelsLP      .put("RUS:MX1!",               350)
+
+if barstate.isfirst  //                        B  M
+    alertLevelsL       .put("RUS:SGZH",          75000000)
+    alertLevelsLH      .put("RUS:SGZH",         100000000)
+    alertLevelsLH_2    .put("RUS:SGZH",         150000000)
+//  alertLevels        .put("RUS:SGZH:3600",    500000000)  // TODO
+//  alertLevelsHuge    .put("RUS:SGZH:3600",   1000000000)
+//  alertLevelsT8      .put("RUS:SGZH:3600",   2000000000)
+//  alertLevelsT8_2    .put("RUS:SGZH:3600",   4000000000)
+//  alertLevelsT8_3    .put("RUS:SGZH:3600",   6000000000)
+//  alertLevelsT8_4    .put("RUS:SGZH:3600",  10000000000)
+//  alertLevelsT24     .put("RUS:SGZH:3600",   6000000000)
+//  alertLevelsT48     .put("RUS:SGZH:3600",  10000000000)
+//  alertLevelsT48_2   .put("RUS:SGZH:3600",  12000000000)
+//  alertLevelsT48_3   .put("RUS:SGZH:3600",  16000000000)
+//  alertLevelsT48_4   .put("RUS:SGZH:3600",  20000000000)
+    alertLevelsP       .put("RUS:SGZH:3600",          300)
+
+if barstate.isfirst  //                        B  M
+    alertLevelsT24     .put("RUS:MTLR:3600",  10000000000)
+    alertLevelsT24_2   .put("RUS:MTLR:3600",  25000000000)
+    alertLevelsP       .put("RUS:MTLR:3600",          500)
+
+if barstate.isfirst  //                        B  M
+    alertLevelsT24     .put("RUS:MTLRP:3600",  3000000000)
+    alertLevelsT24_2   .put("RUS:MTLRP:3600",  6500000000)
+    alertLevelsP       .put("RUS:MTLRP:3600",         500)
+
+
+//MAGNT
+//MTSS
+//RTMK+RTKMP
+//NLMK
+//CHMF
+//NVTK
+//GAZP
+//SNGP
+//PLZL
+//UGLD
+//OZON
+//DELI
+//AFKS
+//LENT
+//AFLT
+//RUAL
+//
+//HEAD
+//MDMG
+
+
+var levell = alertLevelsL.get(tickerid)
+var levellh = alertLevelsLH.get(tickerid)
+var level = isdebugtf ? levell : alertLevels.get(tickerkey)
+var levelh = isdebugtf ? levellh : alertLevelsHuge.get(tickerkey)
+plot(showLevelsBarsOpt ? level : na, "level", color.blue)
+plot(showLevelsBarsOpt ? levelh : na, "levelh", color.purple)
+//extra levels
+var levellh_2 = alertLevelsLH_2.get(tickerid)
+var levelh_2 = isdebugtf ? levellh_2 : alertLevelsH_2.get(tickerkey)
+plot(showExtraLevelsBarsOpt ? levelh_2 : na, "levelh+", color.new(color.purple, 75))
+
+val = volume*hl2
+
+[arr_vall, arr_close_ltf, arr_time_ltf] = request.security_lower_tf(tickerid, periodltf, [volume*hl2, close, time])  // up to 100K intrabars
+//[arr_vall, arr_close_ltf, arr_time_ltf, arr_vallT] = request.security_lower_tf(tickerid, periodltf, [volume*hl2, close, time, math.sum(volume*hl2,40)])
+//if barstate.islastconfirmedhistory
+//    log.info("{0} {1}", arr_close_ltf, arr_vallT)
+hasltf = arr_vall.size() > 0
+vall = hasltf ? barstate.isconfirmed ? arr_vall.max() : arr_vall.last() : na
+//vallT = hasltf ? barstate.isconfirmed ? arr_vallT.max() : arr_vallT.last() : na
+if hasltf
+    arr_close_ltf.reverse()
+    arr_time_ltf.reverse()
+
+
+valrising = ta.rising(val, 1)
+//vallrising = ta.rising(vall, 1)
+
+isbig = val > level and valrising
+ishuge = val > levelh and valrising
+isbigl = vall > levell //and vallrising
+ishugel = vall > levellh //and vallrising
+
+ishuge_2 = val > levelh_2 //and vallrising    // additional extra
+ishugel_2 = vall > levellh_2 //and vallrising
+
+ishugeX2 = val > levelh*2 and valrising  // x2
+ishugeX3 = val > levelh*3 and valrising
+ishugeX4 = val > levelh*4 and valrising
+ishugelX2 = vall > levellh*2 //and vallrising
+ishugelX3 = vall > levellh*3 //and vallrising
+ishugelX4 = vall > levellh*4 //and vallrising
+
+
+clr = ishuge ? color.new(color.purple, 50) :
+      isbig ? color.new(color.blue, 50) :
+      color.new(color.gray, 75)
+plot(showBarsOpt ? val : na, color=clr, style=plot.style_columns, title="Volume Value")
+
+
+//  ------------------------------- cumulative volume
+
+var debugdisplay = display.all  // display.all-display.pane
+var isintraday = timeframe.in_seconds() < 3600
+
+var levelT8 = isintraday ? float(na) : alertLevelsT8.get(tickerkey)
+var levelT24 = isintraday ? float(na) : alertLevelsT24.get(tickerkey)
+var levelT48 = isintraday ? float(na) : alertLevelsT48.get(tickerkey)
+plot(showCumsum8Opt ? levelT8 : na, "levelT8", color.olive, display = debugdisplay)
+plot(showCumsum24Opt ? levelT24 : na, "levelT24", color.gray, display = debugdisplay)
+plot(showCumsum48Opt ? levelT48 : na, "levelT48", color.silver, display = debugdisplay)
+//extra - TODO (replace with series)
+var levelT8_2 = isintraday ? float(na) : alertLevelsT8_2.get(tickerkey)
+var levelT8_3 = isintraday ? float(na) : alertLevelsT8_3.get(tickerkey)
+var levelT8_4 = isintraday ? float(na) : alertLevelsT8_4.get(tickerkey)
+var levelT8_5 = isintraday ? float(na) : alertLevelsT8_5.get(tickerkey)
+plot(showExtraLevels8Opt ? levelT8_2 : na, "levelT8+2", color.new(color.olive, 50), display = debugdisplay)
+plot(showExtraLevels8Opt ? levelT8_3 : na, "levelT8+3", color.new(color.olive, 75), display = debugdisplay)
+plot(showExtraLevels8Opt ? levelT8_4 : na, "levelT8+4", color.new(color.olive, 75), display = debugdisplay)
+plot(showExtraLevels8Opt ? levelT8_5 : na, "levelT8+5", color.new(color.olive, 75), display = debugdisplay)
+var levelT24_2 = isintraday ? float(na) : alertLevelsT24_2.get(tickerkey)
+var levelT24_3 = isintraday ? float(na) : alertLevelsT24_3.get(tickerkey)
+var levelT24_4 = isintraday ? float(na) : alertLevelsT24_4.get(tickerkey)
+var levelT24_5 = isintraday ? float(na) : alertLevelsT24_5.get(tickerkey)
+plot(showExtraLevels24Opt ? levelT24_2 : na, "levelT24+2", color.new(color.gray, 50), display = debugdisplay)
+plot(showExtraLevels24Opt ? levelT24_3 : na, "levelT24+3", color.new(color.gray, 75), display = debugdisplay)
+plot(showExtraLevels24Opt ? levelT24_4 : na, "levelT24+4", color.new(color.gray, 75), display = debugdisplay)
+plot(showExtraLevels24Opt ? levelT24_5 : na, "levelT24+5", color.new(color.gray, 75), display = debugdisplay)
+var levelT48_2 = isintraday ? float(na) : alertLevelsT48_2.get(tickerkey)
+var levelT48_3 = isintraday ? float(na) : alertLevelsT48_3.get(tickerkey)
+var levelT48_4 = isintraday ? float(na) : alertLevelsT48_4.get(tickerkey)
+plot(showExtraLevels48Opt ? levelT48_2 : na, "levelT48+2", color.new(color.silver, 50), display = debugdisplay)
+plot(showExtraLevels48Opt ? levelT48_3 : na, "levelT48+3", color.new(color.silver, 75), display = debugdisplay)
+plot(showExtraLevels48Opt ? levelT48_4 : na, "levelT48+4", color.new(color.silver, 75), display = debugdisplay)
+
+valT2 = isintraday ? float(na) : math.sum(val, 2)
+valT3 = isintraday ? float(na) : math.sum(val, 3)
+valT8 = isintraday ? float(na) : math.sum(val, 8)
+valT24 = isintraday ? float(na) : math.sum(val, 24)
+valT48 = isintraday ? float(na) : math.sum(val, 48)
+
+valT8rising = ta.rising(valT8, 1)
+valT24rising = ta.rising(valT24, 1)
+valT48rising = ta.rising(valT48, 1)
+
+roc8 = ta.roc(valT8, 1)
+
+isbig8 = valT8 > levelT8
+isbig24 = valT24 > levelT24
+isbig48 = valT48 > levelT48
+
+isbig8_2 = valT8 > levelT8_2
+isbig8_3 = valT8 > levelT8_3
+isbig8_4 = valT8 > levelT8_4
+isbig8_5 = valT8 > levelT8_5
+ishuge24_2 = valT24 > levelT24_2
+ishuge24_3 = valT24 > levelT24_3
+ishuge24_4 = valT24 > levelT24_4
+ishuge24_5 = valT24 > levelT24_5
+ishuge48_2 = valT48 > levelT48_2
+ishuge48_3 = valT48 > levelT48_3
+ishuge48_4 = valT48 > levelT48_4
+
+plot(showCumsumBarsOpt ? valT2 : na, color=color.new(color.gray, 90), style=plot.style_columns, title="Vol Value 2t", display = debugdisplay)
+plot(showCumsumBarsOpt ? valT3 : na, color=color.new(color.gray, 95), style=plot.style_columns, title="Vol Value 3t", display = debugdisplay)
+//plot(showCumsumLtfOpt ? vallT : na, color=color.new(color.black, 25), style=plot.style_stepline, title="Vol Value Lt", display = debugdisplay)
+plot(showCumsum8Opt ? valT8 : na, color=color.new(color.olive, 65), style=plot.style_stepline, title="Vol Value 8t", display = debugdisplay)
+//plot(valT8*1.015, color=color.new(color.olive, 75), style=plot.style_stepline, title="Vol Value 8t+", display = debugdisplay)
+//plot(valT8*0.985, color=color.new(color.olive, 75), style=plot.style_stepline, title="Vol Value 8t+", display = debugdisplay)
+plot(showCumsum24Opt ? valT24 : na, color=color.new(color.gray, 85), style=plot.style_stepline, title="Vol Value 24t", display = debugdisplay)
+plot(showCumsum48Opt ? valT48 : na, color=color.new(color.gray, 85), style=plot.style_stepline, title="Vol Value 48t", display = debugdisplay)
+
+valT8same = isbig8 and -1.5 < roc8 and roc8 < 1.5  // ~ 1.5% min
+valT8cond = isbig8 and valT8rising and ta.change(isbig8)
+valT24cond = isbig24 and valT24rising and ta.change(isbig24)
+valT48cond = isbig48 and valT48rising and ta.change(isbig48)
+
+valT8cond2 = isbig8_2 and valT8rising and ta.change(isbig8_2)
+valT8cond3 = isbig8_3 and valT8rising and ta.change(isbig8_3)
+valT8cond4 = isbig8_4 and valT8rising and ta.change(isbig8_4)
+valT8cond5 = isbig8_5 and valT8rising and ta.change(isbig8_5)
+valT24cond2 = ishuge24_2 and valT24rising and ta.change(ishuge24_2)
+valT24cond3 = ishuge24_3 and valT24rising and ta.change(ishuge24_3)
+valT24cond4 = ishuge24_4 and valT24rising and ta.change(ishuge24_4)
+valT24cond5 = ishuge24_5 and valT24rising and ta.change(ishuge24_5)
+valT48cond2 = ishuge48_2 and valT24rising and ta.change(ishuge48_2)
+valT48cond3 = ishuge48_3 and valT24rising and ta.change(ishuge48_3)
+valT48cond4 = ishuge48_4 and valT24rising and ta.change(ishuge48_4)
+
+
+// offset inside day
+timeinrange(sess) => not na(time(timeframe.period, sess)) ? true : false
+var ismoextime = timeinrange("1000-1850,1900-2350:1234567")
+//bgcolor(ismoexday ? color.new(color.aqua,90) : na)
+bars_isNewDay = ta.barssince(ta.change(dayofweek) != 0)  // [ 0, 1, ... ]
+//bars_isNewWeek = ta.barssince(ta.change(weekofyear) != 0)
+//bars_inSession = ta.barssince(ta.change(ismoextime))
+//log.info("[{0}] {1} {2} {3}", bar_index, ta.max(bars_isNewDay), ta.max(bars_isNewWeek), ta.max(bars_inSession))
+
+avgPrevDay() =>
+    var prevDayBarsCount = 0
+    var prevSessionBarsCount = 0
+    var prevDayValue = 0.
+    var prevSessionValue = 0.
+    var dayBarsCount = 0
+    var sessionBarsCount = 0
+    var dayValue = 0.
+    var sessionValue = 0.
+    if bars_isNewDay == 0
+        prevDayBarsCount := dayBarsCount
+        prevSessionBarsCount := sessionBarsCount
+        prevDayValue := dayValue
+        prevSessionValue := sessionValue
+        dayBarsCount := 1
+        dayValue := 0
+        sessionBarsCount := ismoextime ? 1 : 0
+        sessionValue := 0
+    else
+        dayBarsCount := dayBarsCount + 1
+        dayValue := dayValue+val
+        sessionBarsCount := ismoextime ? sessionBarsCount+1 : sessionBarsCount
+        sessionValue := ismoextime ? sessionValue+val : sessionValue
+    prevDayValue/prevDayBarsCount
+
+//val1d = math.sum(val, nz(bars_isNewDay)+1)
+//val1w = math.sum(val, nz(bars_isNewWeek)+1)
+//plot(showBarsHtf1DOpt ? val1d : na, color=color.new(color.gray, 85), style=plot.style_columns, title="Vol Value 1D")
+//plot(showBarsHtf1WOpt ? val1w : na, color=color.new(color.gray, 85), style=plot.style_columns, title="Vol Value 1W")
+
+//val1dhtf = request.security(tickerid, "1D", volume*hl2, barmerge.gaps_off, barmerge.lookahead_on)
+//val1whtf = request.security(tickerid, "1W", volume*hl2, barmerge.gaps_off, barmerge.lookahead_on)
+//plot(showBarsHtf1DOpt ? val1dhtf : na, color=color.new(color.gray, 85), style=plot.style_columns, title="Vol Value 1D")
+//plot(showBarsHtf1WOpt ? val1whtf : na, color=color.new(color.gray, 85), style=plot.style_columns, title="Vol Value 1W")
+
+var levellp = alertLevelsLP.get(tickerid)
+var levelp = isdebugtf ? levellp : alertLevelsP.get(tickerkey)
+avg = avgPrevDay()
+roc_avg = (val-avg)/avg * 100
+roc_val = ta.roc(val, 1)
+isbigp = roc_avg > levelp and roc_val > 5
+//if roc_avg > 300 and roc_val > 20
+//    debugLabelUp( str.format("{0}:{1}:{2}\n{3,number,#}%\n{4,number,#}%\n{5}", bars1D, prevSessionBarsCount, prevDayBarsCount, roc_avg, roc_val, bars_inSession))
+plot(showBarsHtf1DOpt ? avg + avg*levelp/100 : na, color=color.new(color.blue, 50), style=plot.style_stepline, title="levelp")
+
+avgl = request.security_lower_tf(tickerid, periodltf, avgPrevDay())
+
+//
+// bgcolor 'in the past' logic
+//
+const int offset = 8-1
+var condFirstDetected = false
+var condDayOffset = 0
+var condStopRising = false
+//islivebig8 = valT8 > levelT8 and -1.5 < ta.roc(valT8, 1)
+//len_valT8rising = ta.barssince(not islivebig8)  // [ 1, 2 ... ]
+if valT8cond
+    condFirstDetected := true
+condLen = ta.barssince(condFirstDetected == false)  // count of true(s)
+if ta.change(condFirstDetected)
+    condDayOffset := bars_isNewDay
+if condFirstDetected and roc8 <= -1.5
+    condStopRising := true
+bars_valT8rising = ta.barssince(not condStopRising)  // [   ] 1, 2 ...
+if bars_valT8rising > (offset)
+    condFirstDetected := false
+    condStopRising := false
+valT8while = condFirstDetected and
+             condLen > ((offset) - (condDayOffset))  // skip
+
+// if (month == 9 and (dayofmonth == 27 or dayofmonth == 30)) or (month == 10 and (dayofmonth == 1))
+//     debugLabel(str.format("cond:{0}\nstop:{1}",
+//              condFirstDetected,condStopRising))
+//     debugLabel2(str.format("day:{0}\noffset:{1}\ncondLen:{2}\nsinceStop:{3}\nwhile:{4}",
+//              bars_isNewDay,condDayOffset,condLen,bars_valT8rising,valT8while))
+
+
+color bgclr = ishuge or ishugel ? color.new(color.purple, 75) :
+              isbig or isbigl ? color.new(color.blue, 75) :
+              valT8cond ? color.new(color.olive, 75) :
+              valT8same ? color.new(color.yellow, 90) :
+              valT24cond ? color.new(color.gray, 75) :
+              valT24cond2 ? color.new(color.gray, 90) :
+              valT48cond ? color.new(color.silver, 75) :
+              valT48cond2 ? color.new(color.silver, 90) :
+              isbigp ? color.new(color.teal, 75) :
+              na
+color bgclrT = valT8while ? color.new(color.olive, 90) :
+              na
+bgcolor(bgclrT, editable = false, force_overlay = true, offset = -offset)
+bgcolor(bgclr, editable = false, force_overlay = true)
+
+
+//alertcondition(isbig, "alert big", "big volume value")
+//alertcondition(ishuge, "alert huge", "huge volume value")
+
+indexHighTF = barstate.isrealtime ? 1 : 0
+indexCurrTF = barstate.isrealtime ? 0 : 1
+prevDayClose = request.security(tickerid, "1D", close[indexHighTF])[indexCurrTF]
+//plot(prevDayClose, force_overlay=true)
+
+prevBarClose = close[1]
+prevBarLtfClose = arr_close_ltf.size() > 1 ? arr_close_ltf.get(1) : prevBarClose
+varip prevTickClose = 0.
+
+varip triggrered = map.new<string,bool>()
+varip triggreredltf = map.new<string,bool>()
+varip lasttimeltf = 0
+timeltf = hasltf ? arr_time_ltf.first() : na
+
+if barstate.isnew
+    triggrered.clear()
+if timeltf - lasttimeltf > 0  // changed
+    triggreredltf.clear()
+    lasttimeltf := arr_time_ltf.first()
+
+istrig(v) => triggrered.contains(v)
+notrig(v) => not triggrered.contains(v)
+trig(v) => triggrered.put(v,true)
+
+istrigl(v) => triggreredltf.contains(v)
+notrigl(v) => not triggreredltf.contains(v)
+trigl(v) => triggreredltf.put(v,true)
+
+
+if isdebugtf
+
+    if ishuge and notrig("huge")
+        alert(str.format( "{0} 1hour Huge Volume {1} : {2}->{3}", syminfo.ticker, strVolume(alertLevelsLH.get(tickerid)), strPrice(prevBarClose), strPrice(close) ), alert.freq_all)
+        trig("huge")
+    if isbig and notrig("big")
+        alert(str.format( "{0} 1hour Big Volume {1} : {2}->{3}", syminfo.ticker, strVolume(alertLevelsL.get(tickerid)), strPrice(prevBarClose), strPrice(close) ), alert.freq_all)
+        trig("big")
+
+else
+
+    if ishuge_2 and notrig("huge2")
+        alert(str.format( "{0} 1hour Huge Volume+ {1} : Bar {2} {3}->{4}{5}", syminfo.ticker, strVolume(alertLevelsHuge.get(tickerkey)), strUpDn(close-prevBarClose), strPrice(prevBarClose), strPrice(close), istrig("big")?" SAME":"" ), alert.freq_all)
+        trig("huge2")
+        trig("huge")
+        trig("big")
+    if ishuge and notrig("huge")
+        alert(str.format( "{0} 1hour Huge Volume {1} : Bar {2} {3}->{4}{5}", syminfo.ticker, strVolume(alertLevelsHuge.get(tickerkey)), strUpDn(close-prevBarClose), strPrice(prevBarClose), strPrice(close), istrig("big")?" SAME":"" ), alert.freq_all)
+        trig("huge")
+        trig("big")
+    if isbigp and notrig("isbigp")
+        alert(str.format( "{0} 1hour {1}% Volume {2}: Bar {3} {4}->{5}{6}", syminfo.ticker, alertLevelsP.get(tickerkey), strVolume(val), strUpDn(close-prevBarClose), strPrice(prevBarClose), strPrice(close), istrigl("big")?" SAME":"" ), alert.freq_all)
+        trig("isbigp")
+    if isbig and notrig("big")
+        alert(str.format( "{0} 1hour Big Volume {1} : Bar {2} {3}->{4}{5}", syminfo.ticker, strVolume(alertLevels.get(tickerkey)), strUpDn(close-prevBarClose), strPrice(prevBarClose), strPrice(close), istrigl("big")?" SAME":"" ), alert.freq_all)
+        trig("big")
+
+    if ishugel_2 and notrigl("huge2")
+        alert(str.format( "{0} 3min Huge Volume+ {1} : Bar {2} {3}->{4} Tick {5}{6}", syminfo.ticker, strVolume(alertLevelsLH.get(tickerid)), strUpDn(close-prevBarLtfClose), strPrice(prevBarLtfClose), strPrice(close), strUpDn(close-prevTickClose), istrigl("big")?" SAME":"" ), alert.freq_all)
+        trigl("huge2")
+        trigl("huge")
+        trigl("big")
+    if ishugel and notrigl("huge")
+        alert(str.format( "{0} 3min Huge Volume {1} : Bar {2} {3}->{4} Tick {5}{6}", syminfo.ticker, strVolume(alertLevelsLH.get(tickerid)), strUpDn(close-prevBarLtfClose), strPrice(prevBarLtfClose), strPrice(close), strUpDn(close-prevTickClose), istrigl("big")?" SAME":"" ), alert.freq_all)
+        trigl("huge")
+        trigl("big")
+    if isbigl and notrigl("big")
+        alert(str.format( "{0} 3min Big Volume {1} : Bar {2} {3}->{4} Tick {5}{6}", syminfo.ticker, strVolume(alertLevelsL.get(tickerid)), strUpDn(close-prevBarLtfClose), strPrice(prevBarLtfClose), strPrice(close), strUpDn(close-prevTickClose), istrig("big")?" SAME":"" ), alert.freq_all)
+        trigl("big")
+
+    if ishugeX4 and notrig("hugeX4")
+        alert(str.format( "{0} 1hour HugeX2 Volume {1} : Bar {2} {3}->{4}{5}", syminfo.ticker, strVolume(alertLevelsHuge.get(tickerkey)*2), strUpDn(close-prevBarClose), strPrice(prevBarClose), strPrice(close), istrig("big")?" SAME":"" ), alert.freq_all)
+        trig("hugeX4")
+        trig("hugeX3")
+        trig("hugeX2")
+    if ishugeX3 and notrig("hugeX3")
+        alert(str.format( "{0} 1hour HugeX2 Volume {1} : Bar {2} {3}->{4}{5}", syminfo.ticker, strVolume(alertLevelsHuge.get(tickerkey)*2), strUpDn(close-prevBarClose), strPrice(prevBarClose), strPrice(close), istrig("big")?" SAME":"" ), alert.freq_all)
+        trig("hugeX3")
+        trig("hugeX2")
+    if ishugeX2 and notrig("hugeX2")
+        alert(str.format( "{0} 1hour HugeX2 Volume {1} : Bar {2} {3}->{4}{5}", syminfo.ticker, strVolume(alertLevelsHuge.get(tickerkey)*2), strUpDn(close-prevBarClose), strPrice(prevBarClose), strPrice(close), istrig("big")?" SAME":"" ), alert.freq_all)
+        trig("hugeX2")
+
+    if ishugelX4 and notrigl("hugeX4")
+        alert(str.format( "{0} 3min HugeX2 Volume {1} : Bar {2} {3}->{4} Tick {5}{6}", syminfo.ticker, strVolume(alertLevelsLH.get(tickerid)), strUpDn(close-prevBarLtfClose), strPrice(prevBarLtfClose), strPrice(close), strUpDn(close-prevTickClose), istrigl("big")?" SAME":"" ), alert.freq_all)
+        trigl("hugeX4")
+        trigl("hugeX3")
+        trigl("hugeX2")
+    if ishugelX3 and notrigl("hugeX3")
+        alert(str.format( "{0} 3min HugeX2 Volume {1} : Bar {2} {3}->{4} Tick {5}{6}", syminfo.ticker, strVolume(alertLevelsLH.get(tickerid)), strUpDn(close-prevBarLtfClose), strPrice(prevBarLtfClose), strPrice(close), strUpDn(close-prevTickClose), istrigl("big")?" SAME":"" ), alert.freq_all)
+        trigl("hugeX3")
+        trigl("hugeX2")
+    if ishugelX2 and notrigl("hugeX2")
+        alert(str.format( "{0} 3min HugeX2 Volume {1} : Bar {2} {3}->{4} Tick {5}{6}", syminfo.ticker, strVolume(alertLevelsLH.get(tickerid)), strUpDn(close-prevBarLtfClose), strPrice(prevBarLtfClose), strPrice(close), strUpDn(close-prevTickClose), istrigl("big")?" SAME":"" ), alert.freq_all)
+        trigl("hugeX2")
+
+    if valT8cond5 and notrig("8t5")
+        alert(str.format( "{0} 8hour Volume+ {1} : Bar {2} {3}->{4}{5}", syminfo.ticker, strVolume(alertLevelsT8.get(tickerkey)), strUpDn(close-prevBarClose), strPrice(prevBarClose), strPrice(close), istrig("8t") or istrigl("8t2") or istrigl("8t3") or istrigl("8t4")?" SAME":"" ), alert.freq_all)
+        trig("8t5")
+        trig("8t4")
+        trig("8t3")
+        trig("8t2")
+        trig("8t")
+    if valT8cond4 and notrig("8t4")
+        alert(str.format( "{0} 8hour Volume+ {1} : Bar {2} {3}->{4}{5}", syminfo.ticker, strVolume(alertLevelsT8.get(tickerkey)), strUpDn(close-prevBarClose), strPrice(prevBarClose), strPrice(close), istrig("8t") or istrigl("8t2") or istrigl("8t3")?" SAME":"" ), alert.freq_all)
+        trig("8t4")
+        trig("8t3")
+        trig("8t2")
+        trig("8t")
+    if valT8cond3 and notrig("8t3")
+        alert(str.format( "{0} 8hour Volume+ {1} : Bar {2} {3}->{4}{5}", syminfo.ticker, strVolume(alertLevelsT8.get(tickerkey)), strUpDn(close-prevBarClose), strPrice(prevBarClose), strPrice(close), istrig("8t") or istrigl("8t2")?" SAME":"" ), alert.freq_all)
+        trig("8t3")
+        trig("8t2")
+        trig("8t")
+    if valT8cond2 and notrig("8t2")
+        alert(str.format( "{0} 8hour Volume+ {1} : Bar {2} {3}->{4}{5}", syminfo.ticker, strVolume(alertLevelsT8.get(tickerkey)), strUpDn(close-prevBarClose), strPrice(prevBarClose), strPrice(close), istrig("8t")?" SAME":"" ), alert.freq_all)
+        trig("8t2")
+        trig("8t")
+    if valT8cond and notrig("8t")
+        alert(str.format( "{0} 8hour Volume {1} : Bar {2} {3}->{4}{5}", syminfo.ticker, strVolume(alertLevelsT8.get(tickerkey)), strUpDn(close-prevBarClose), strPrice(prevBarClose), strPrice(close), istrig("big") or istrigl("big")?" SAME":"" ), alert.freq_all)
+        trig("8t")
+
+    if valT24cond5 and notrig("24t5")
+        alert(str.format( "{0} 24hour MAX Volume+ {1} : Bar {2} {3}->{4}{5}", syminfo.ticker, strVolume(alertLevelsT24.get(tickerkey)), strUpDn(close-prevBarClose), strPrice(prevBarClose), strPrice(close), istrig("24t") or istrigl("24t2") or istrig("24t3") or istrig("24t4")?" SAME":"" ), alert.freq_all)
+        trig("24t5")
+        trig("24t4")
+        trig("24t3")
+        trig("24t2")
+        trig("24t")
+    if valT24cond4 and notrig("24t4")
+        alert(str.format( "{0} 24hour MAX Volume+ {1} : Bar {2} {3}->{4}{5}", syminfo.ticker, strVolume(alertLevelsT24.get(tickerkey)), strUpDn(close-prevBarClose), strPrice(prevBarClose), strPrice(close), istrig("24t") or istrigl("24t2") or istrig("24t3")?" SAME":"" ), alert.freq_all)
+        trig("24t4")
+        trig("24t3")
+        trig("24t2")
+        trig("24t")
+    if valT24cond3 and notrig("24t3")
+        alert(str.format( "{0} 24hour MAX Volume+ {1} : Bar {2} {3}->{4}{5}", syminfo.ticker, strVolume(alertLevelsT24.get(tickerkey)), strUpDn(close-prevBarClose), strPrice(prevBarClose), strPrice(close), istrig("24t") or istrigl("24t2")?" SAME":"" ), alert.freq_all)
+        trig("24t3")
+        trig("24t2")
+        trig("24t")
+    if valT24cond2 and notrig("24t2")
+        alert(str.format( "{0} 24hour MAX Volume+ {1} : Bar {2} {3}->{4}{5}", syminfo.ticker, strVolume(alertLevelsT24.get(tickerkey)), strUpDn(close-prevBarClose), strPrice(prevBarClose), strPrice(close), istrig("24t")?" SAME":"" ), alert.freq_all)
+        trig("24t2")
+        trig("24t")
+    if valT24cond and notrig("24t")
+        alert(str.format( "{0} 24hour Volume {1} : Bar {2} {3}->{4}{5}", syminfo.ticker, strVolume(alertLevelsT24.get(tickerkey)), strUpDn(close-prevBarClose), strPrice(prevBarClose), strPrice(close), istrig("8t")?" SAME":"" ), alert.freq_all)
+        trig("24t")
+
+    if valT48cond4 and notrig("48t4")
+        alert(str.format( "{0} 48hour MAX Volume+ {1} : Bar {2} {3}->{4}{5}", syminfo.ticker, strVolume(alertLevelsT48.get(tickerkey)), strUpDn(close-prevBarClose), strPrice(prevBarClose), strPrice(close), istrig("48t") or istrig("48t2") or istrig("48t3")?" SAME":"" ), alert.freq_all)
+        trig("48t4")
+        trig("48t3")
+        trig("48t2")
+        trig("48t")
+    if valT48cond3 and notrig("48t3")
+        alert(str.format( "{0} 48hour MAX Volume+ {1} : Bar {2} {3}->{4}{5}", syminfo.ticker, strVolume(alertLevelsT48.get(tickerkey)), strUpDn(close-prevBarClose), strPrice(prevBarClose), strPrice(close), istrig("48t") or istrig("48t2")?" SAME":"" ), alert.freq_all)
+        trig("48t3")
+        trig("48t2")
+        trig("48t")
+    if valT48cond2 and notrig("48t2")
+        alert(str.format( "{0} 48hour MAX Volume+ {1} : Bar {2} {3}->{4}{5}", syminfo.ticker, strVolume(alertLevelsT48.get(tickerkey)), strUpDn(close-prevBarClose), strPrice(prevBarClose), strPrice(close), istrig("48t")?" SAME":"" ), alert.freq_all)
+        trig("48t2")
+        trig("48t")
+    if valT48cond and notrig("48t")
+        alert(str.format( "{0} 48hour Volume {1} : Bar {2} {3}->{4}{5}", syminfo.ticker, strVolume(alertLevelsT48.get(tickerkey)), strUpDn(close-prevBarClose), strPrice(prevBarClose), strPrice(close), istrig("8t") or istrig("24t")?" SAME":"" ), alert.freq_all)
+        trig("48t")
+
+
+prevTickClose := close
+
+//  ------------------------------- original
+
+//study(title="Volume Value", shorttitle="VoVa", format=format.volume)
+//showMA = input(true)
+//barColorsOnPrevClose = input(title="Color bars based on previous close", type=input.bool, defval=false)
+//palette = barColorsOnPrevClose ? close[1] > close ? color.red : color.green : open > close ? color.red : color.green
+//plot(volume * close, color = palette, style=plot.style_columns, title="Volume Value", transp=65)
