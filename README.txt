@@ -17,8 +17,13 @@ https://www.tradingview.com/pine-script-docs/en/v5/concepts/Timeframes.html#time
   "1S”, "30” (30 minutes), "1D” (one day), "3M” (three months)
   "1” is interpreted as "1min”, "S” is equivalent to "1S”, "D” to "1D, etc.
 
+https://www.tradingview.com/pine-script-docs/en/v5/concepts/Repainting.html#future-leak-with-request-security
+  lookahead_on - at higher timeframes without offsetting the expression (close -> close[1]) will introduce future leak in scripts
+                 as the function will then return the close price before it is actually known in the current context
+https://www.tradingview.com/pine-script-docs/en/v5/concepts/Repainting.html#pagerepainting-historicalvsrealtimecalculations-repaintingrequestsecuritycalls
+
 https://www.tradingview.com/pine-script-docs/en/v5/concepts/Repainting.html?highlight=isnew#bar-state-built-ins
-barstate.isnew is true on the bar’s close, yet in realtime, it is true on the bar’s open
+  barstate.isnew is true on the bar’s close, yet in realtime, it is true on the bar’s open
 
 https://www.tradingview.com/pine-script-docs/en/v5/concepts/Bar_states.html#barstate-isnew
 
