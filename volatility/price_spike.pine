@@ -1,0 +1,47 @@
+//@version=6
+indicator("Price Spike Detector", "price_spike", format = format.price, overlay = false)
+
+int inputLengthPercentile = input.int(2500, "percentile lenght")
+int inputLengthCum = input.int(3, "cumulative lenght")
+
+//price_change = high - low
+//price_change = na(high[1]) ? high-low : math.max(math.max(high - low, math.abs(high - close[1])), math.abs(low - close[1]))  // trueRange
+price_change = nz(math.max(math.abs(open-close), math.abs(open-close[1]), math.abs(close-close[1])))
+
+price_change_positive = close > open or close > close[1] ? price_change : 0
+price_change_negative = close < open or close < close[1] ? price_change : 0
+
+price_change_positive_p99 = ta.percentile_nearest_rank(price_change_positive, inputLengthPercentile, 99.75)
+price_change_negative_p99 = ta.percentile_nearest_rank(price_change_negative, inputLengthPercentile, 99.75)
+
+//change_of_change = ta.change(price_change)
+//price_change_cum = ta.cum(price_change)
+
+price_change_plot = close >= open ? price_change : -price_change
+
+plot(price_change_plot, "change", style = plot.style_columns, color=color.new(color.gray, 50))
+plot(price_change_positive_p99, "+changeP99", color = color.new(color.gray,50))
+plot(-price_change_negative_p99, "-changeP99", color = color.new(color.gray,50))
+
+bgcolor(price_change_positive >= price_change_positive_p99 ? color.new(color.green, 85) : na)
+bgcolor(price_change_negative >= price_change_negative_p99 ? color.new(color.red, 85) : na)
+bgcolor(price_change_positive >= price_change_positive_p99 ? color.new(color.green, 85) : na, force_overlay = true)
+bgcolor(price_change_negative >= price_change_negative_p99 ? color.new(color.red, 85) : na, force_overlay = true)
+
+// Cumulative
+
+cum_pos = math.sum(price_change_positive, inputLengthCum)
+cum_neg = math.sum(price_change_negative, inputLengthCum)
+
+plot(cum_pos, "+cum", color = color.new(color.olive,75))
+plot(-cum_neg, "-cum", color = color.new(color.olive,75))
+
+cum_positive_p99 = ta.percentile_nearest_rank(cum_pos, inputLengthPercentile, 99.75)
+cum_negative_p99 = ta.percentile_nearest_rank(cum_neg, inputLengthPercentile, 99.75)
+
+plot(cum_positive_p99, "+cumP99", color = color.new(color.olive,75))
+plot(-cum_negative_p99, "-cumP99", color = color.new(color.olive,75))
+
+bgcolor(cum_pos >= cum_positive_p99 ? color.new(color.green, 85) : na, force_overlay = true)
+bgcolor(cum_neg >= cum_negative_p99 ? color.new(color.red, 85) : na, force_overlay = true)
+
