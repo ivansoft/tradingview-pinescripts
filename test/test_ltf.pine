@@ -1,0 +1,35 @@
+// This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © ivansoft
+
+//@version=6
+indicator("Test LTF History", "test_ltf", format = format.volume, overlay = false)
+
+debugLabelUp(txt,overlay=true) =>
+    label.new(bar_index, high, txt, yloc = yloc.abovebar, style = label.style_arrowdown, force_overlay = overlay, textcolor = color.black)
+debugLabelDn(txt,overlay=true) =>
+    label.new(bar_index, low, txt, yloc = yloc.belowbar, style = label.style_arrowup, force_overlay = overlay, textcolor = color.black)
+
+
+[valreq, timereq] = request.security(syminfo.tickerid, timeframe.period, [volume*hl2, time])
+[arrValreq, arrTimereq] = request.security_lower_tf(syminfo.tickerid, "3", [volume*hl2, time])
+
+var bars_count = 0
+
+// The history-referencing length for the expression must be a value between 0 and 5000.
+if bars_count == 5000
+    debugLabelUp(str.format("{2}\n{1}\n{0}",bar_index,valreq[5000], str.format_time(timereq[5000])))
+    debugLabelDn(str.format("{0}\n{1}",bar_index,array.size(arrValreq)))
+
+// First bar with Lower Timeframe data available
+if array.size(arrValreq) > 0
+    var first_bar_withlt = debugLabelDn(str.format("{0}\n{1}\n{2}\n{3}\n{4}",bar_index,array.size(arrValreq)
+         ,str.format_time(time)
+         ,str.format_time(array.first(arrTimereq))
+         ,str.format_time(array.last(arrTimereq))
+     ))
+
+// Self-Check
+if barstate.isfirst
+    debugLabelDn(str.format("{0}\n{1}", bar_index, bars_count))
+
+bars_count := bars_count + 1
