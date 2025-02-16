@@ -1,0 +1,46 @@
+//@version=6
+indicator("Average price", "vwap", format = format.price, overlay = false)
+
+bool inputShowVwap = input.bool(true, "VWAP", inline = "2")
+bool inputShowVwapMain = input.bool(true, "Main", inline = "2")
+bool inputShowVwapStdDev = input.bool(true, "StdDev", inline = "2")
+float inputVwapStdDevMult = input.float(2.0, title='Mult', display = display.none, inline = "2")
+
+var displayMode = display.data_window + display.pane
+var displayModeOverlay = display.pane
+
+
+oc2 = (open + close) / 2
+
+
+//anchor = timeframe.change("1D")
+[vwap, upper, lower] = ta.vwap(oc2, timeframe.change("D"), inputVwapStdDevMult) // anchor "1D" is default
+
+plot(inputShowVwap and inputShowVwapMain ? vwap : na, display = displayModeOverlay, editable = false, force_overlay = true)
+plot(inputShowVwap and inputShowVwapStdDev ? upper : na, color = color.gray, display = displayModeOverlay, editable = false, force_overlay = true)
+plot(inputShowVwap and inputShowVwapStdDev ? lower : na, color = color.gray, display = displayModeOverlay, editable = false, force_overlay = true)
+
+
+delta = oc2 - vwap
+
+
+colorarea = switch
+    delta > 0 => color.green
+    delta < 0 => color.red
+    => color.gray
+plot(delta, style = plot.style_area, color = colorarea)
+
+positive_delta = delta > 0 ? delta : 0
+negative_delta = delta < 0 ? -delta : 0
+
+p99_delta_positive = ta.percentile_nearest_rank(positive_delta, 2000, 99.9)
+p99_delta_negative = ta.percentile_nearest_rank(negative_delta, 2000, 99.9)
+
+plot(p99_delta_positive, color = color.new(color.gray, 50), title = "+p99")
+plot(-p99_delta_negative, color = color.new(color.gray, 50), title = "-p99")
+plot(delta, "delta")
+
+bgcolor(positive_delta >= p99_delta_positive ? color.new(color.green, 85) : na)
+bgcolor(negative_delta >= p99_delta_negative ? color.new(color.red, 85) : na)
+bgcolor(positive_delta >= p99_delta_positive ? color.new(color.green, 85) : na, force_overlay = true)
+bgcolor(negative_delta >= p99_delta_negative ? color.new(color.red, 85) : na, force_overlay = true)

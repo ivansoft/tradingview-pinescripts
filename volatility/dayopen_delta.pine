@@ -1,0 +1,42 @@
+//@version=6
+indicator("DayOpen Delta Volatiliy", "delta_dayopen", format = format.price, overlay = false)
+
+debugLabelUp(txt,overlay=true) =>
+    label.new(bar_index, high, txt, yloc = yloc.abovebar, style = label.style_arrowdown, force_overlay = overlay, textcolor = color.black)
+debugLabelDn(txt,overlay=true) =>
+    label.new(bar_index, low, txt, yloc = yloc.belowbar, style = label.style_arrowup, force_overlay = overlay, textcolor = color.black)
+
+
+daychange = ta.change(dayofmonth) != 0
+daychangelength = nz(ta.barssince(daychange))
+
+dayopen = open[daychangelength]
+
+plot(dayopen, force_overlay = true)
+
+
+oc2 = (open + close) / 2
+
+delta = oc2 - dayopen
+
+
+colorarea = switch
+    delta > 0 => color.green
+    delta < 0 => color.red
+    => color.gray
+plot(delta, style = plot.style_area, color = colorarea)
+
+positive_delta = delta > 0 ? delta : 0
+negative_delta = delta < 0 ? -delta : 0
+
+p99_delta_positive = ta.percentile_nearest_rank(positive_delta, 2000, 99)
+p99_delta_negative = ta.percentile_nearest_rank(negative_delta, 2000, 99)
+
+plot(p99_delta_positive, color = color.new(color.gray, 50), title = "+p99")
+plot(-p99_delta_negative, color = color.new(color.gray, 50), title = "-p99")
+plot(delta, "delta")
+
+bgcolor(positive_delta >= p99_delta_positive ? color.new(color.green, 85) : na)
+bgcolor(negative_delta >= p99_delta_negative ? color.new(color.red, 85) : na)
+bgcolor(positive_delta >= p99_delta_positive ? color.new(color.green, 85) : na, force_overlay = true)
+bgcolor(negative_delta >= p99_delta_negative ? color.new(color.red, 85) : na, force_overlay = true)
