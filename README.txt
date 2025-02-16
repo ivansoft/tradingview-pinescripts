@@ -27,8 +27,8 @@ https://www.tradingview.com/pine-script-docs/en/v5/concepts/Repainting.html?high
 
 https://www.tradingview.com/pine-script-docs/en/v5/concepts/Bar_states.html#barstate-isnew
 
-            history            history      history      realtime  #confirmed    #new     realtime  #confirmed
- |                          | confirmed | #uncompleted |   tick   |  update  |          |          |  update  | ... 
+            history            history      history      realtime   realtime   realtime   realtime   realtime
+ |                          | confirmed | #uncompleted |   tick   |#confirmed|   #new   |   tick   |#confirmed| ... 
  | isnew 1                  |     1     |      1       |  1 -> 0  |    0     |  0 -> 1  |  1 -> 0  |    0     |     
  | isconfirmed 1            |     1     |    1 -> 0    |    0     |  0 -> 1  |  1 -> 0  |    0     |  0 -> 1  |     
  | isrealtime 0             |     0     |      0 !     |  0 -> 1  |    1     |    1     |    1     |    1     |     
