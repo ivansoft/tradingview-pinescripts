@@ -40,7 +40,9 @@ plot(p99_delta_positive, color = color.new(color.gray, 50), title = "+p99")
 plot(-p99_delta_negative, color = color.new(color.gray, 50), title = "-p99")
 plot(delta, "delta")
 
-bgcolor(positive_delta >= p99_delta_positive ? color.new(color.green, 85) : na)
-bgcolor(negative_delta >= p99_delta_negative ? color.new(color.red, 85) : na)
-bgcolor(positive_delta >= p99_delta_positive ? color.new(color.green, 85) : na, force_overlay = true)
-bgcolor(negative_delta >= p99_delta_negative ? color.new(color.red, 85) : na, force_overlay = true)
+bgcolor_delta = switch
+    positive_delta >= p99_delta_positive => color.new(color.green, 85)
+    negative_delta >= p99_delta_negative => color.new(color.red, 85)
+    => na
+bgcolor(bgcolor_delta)
+bgcolor(bgcolor_delta, force_overlay = true)

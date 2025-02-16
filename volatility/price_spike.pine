@@ -23,10 +23,12 @@ plot(price_change_plot, "change", style = plot.style_columns, color=color.new(co
 plot(price_change_positive_p99, "+changeP99", color = color.new(color.gray,50))
 plot(-price_change_negative_p99, "-changeP99", color = color.new(color.gray,50))
 
-bgcolor(price_change_positive >= price_change_positive_p99 ? color.new(color.green, 85) : na)
-bgcolor(price_change_negative >= price_change_negative_p99 ? color.new(color.red, 85) : na)
-bgcolor(price_change_positive >= price_change_positive_p99 ? color.new(color.green, 85) : na, force_overlay = true)
-bgcolor(price_change_negative >= price_change_negative_p99 ? color.new(color.red, 85) : na, force_overlay = true)
+bgcolor_price_change = switch
+    price_change_positive >= price_change_positive_p99 => color.new(color.green, 85)
+    price_change_negative >= price_change_negative_p99 => color.new(color.red, 85)
+    => na
+bgcolor(bgcolor_price_change)
+bgcolor(bgcolor_price_change, force_overlay = true)
 
 // Cumulative
 
@@ -42,6 +44,9 @@ cum_negative_p99 = ta.percentile_nearest_rank(cum_neg, inputLengthPercentile, 99
 plot(cum_positive_p99, "+cumP99", color = color.new(color.olive,75))
 plot(-cum_negative_p99, "-cumP99", color = color.new(color.olive,75))
 
-bgcolor(cum_pos >= cum_positive_p99 ? color.new(color.green, 85) : na, force_overlay = true)
-bgcolor(cum_neg >= cum_negative_p99 ? color.new(color.red, 85) : na, force_overlay = true)
+bgcolor_cum = switch
+    cum_pos >= cum_positive_p99 => color.new(color.green, 85)
+    cum_neg >= cum_negative_p99 => color.new(color.red, 85)
+    => na
+bgcolor(bgcolor_cum, force_overlay = true)
 
