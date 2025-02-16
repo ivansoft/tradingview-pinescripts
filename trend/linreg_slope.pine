@@ -1,0 +1,132 @@
+//@version=6
+indicator("Trend by Linreg Slope", "linreg_slope", precision = 3, timeframe = "3")
+
+int multD = input.int(4, "multD", inline = "01")
+int mult = input.int(100, "mult", inline = "01")
+int inputLengthPercentile = input.int(2500, "percentile lenght")
+
+var const string group = "Show/Hide"
+bool inputShowLinregDay = input.bool(true, "Day Linreg", inline = "10", group = group)
+bool inputShowLinregDayLine = input.bool(true, "Line", inline = "10", group = group)
+
+oc2 = (open + close) / 2
+source_linreg = oc2
+
+
+// Day
+
+//@variable The 20-bar linear regression slope of `hl2` prices from the symbol on the "1D" timeframe.
+indexHighTF = barstate.isrealtime ? 1 : 0
+indexCurrTF = barstate.isrealtime ? 0 : 1
+float requestedSlopeD = request.security(
+     syminfo.tickerid, "1D",
+     ta.linreg(source_linreg[indexHighTF], multD, 0) - 
+     ta.linreg(source_linreg[indexHighTF], multD, 1),
+     barmerge.gaps_off, barmerge.lookahead_on
+ )[indexCurrTF]
+
+//@variable Is `color.teal` when the `requestedSlope` is positive, and `color.maroon` otherwise.
+color plotColorD = requestedSlopeD > 0 ? color.new(color.teal,85) : color.new(color.maroon,85)
+
+// Plot the `requestedSlope` with the `plotColor`.
+plot(inputShowLinregDay ? requestedSlopeD : na, "slopeD", plotColorD, 1, plot.style_area)
+
+
+// Lower Time Frame
+
+float slope = ta.linreg(source_linreg, mult, 0) - ta.linreg(source_linreg, mult, 1)
+color plotColor = slope > 0 ? color.teal : color.maroon
+
+plot(slope, "slope", plotColor, 1, plot.style_area)
+
+
+// Original Linreg
+
+float requestedLinregD = request.security(
+     syminfo.tickerid, "1D",
+     ta.linreg(source_linreg[indexHighTF], multD, 0),
+     barmerge.gaps_off, barmerge.lookahead_on
+ )[indexCurrTF]
+
+plot(inputShowLinregDayLine ? requestedLinregD : na, "linregD", force_overlay = true)
+plot(ta.linreg(source_linreg, mult, 0), "linreg", force_overlay = true)
+
+
+// Trend Acceleration Upward/Downward
+
+slope_pos = slope > 0 ? slope : 0
+slope_neg = slope < 0 ? -slope : 0
+
+p99_slope_pos = ta.percentile_nearest_rank(slope_pos, inputLengthPercentile, 100)
+p99_slope_neg = ta.percentile_nearest_rank(slope_neg, inputLengthPercentile, 100)
+//p99_slope_pos := math.max(p99_slope_pos, 0.01)
+//p99_slope_neg := math.max(p99_slope_neg, 0.01)
+
+plot(p99_slope_pos, "+slopeP99", color = color.new(color.gray,50))
+plot(-p99_slope_neg, "-slopeP99", color = color.new(color.gray,50))
+
+over_bgcolor = switch
+    slope >= p99_slope_pos => color.new(color.gray, 85)
+    slope <= -p99_slope_neg => color.new(color.gray, 85)
+    => na
+bgcolor(over_bgcolor)
+bgcolor(over_bgcolor, force_overlay = true)
+
+
+// Pivot Points
+
+var int point_h_index = na
+var int point_h_zone_end_index = na
+var int point_h_zone_start_index = na
+var int point_l_index = na
+var int point_l_zone_end_index = na
+var int point_l_zone_start_index = na
+
+const int leftBars = 20
+const int rightBars = 20
+const int anchor_offset = 50
+
+ph_high = ta.pivothigh(high, leftBars, rightBars)
+ph_slope_pos = ta.pivothigh(slope_pos, leftBars, rightBars)
+ph_high := slope > 0 ? ph_high : na
+ph_low = ta.pivotlow(low, leftBars, rightBars)
+ph_slope_neg = ta.pivotlow(-slope_neg, leftBars, rightBars)
+ph_low := slope < 0 ? ph_low : na
+
+//plot(ph_high, style = plot.style_circles, linewidth = 6, force_overlay = true, offset = -rightBars)
+//plot(ph_slope_pos, style = plot.style_circles, linewidth = 6, offset = -rightBars)
+//plot(ph_low, style = plot.style_circles, linewidth = 6, force_overlay = true, offset = -rightBars)
+//plot(ph_slope_neg, style = plot.style_circles, linewidth = 6, offset = -rightBars)
+
+if not na(ph_high)
+    point_h_index := bar_index
+if not na(ph_slope_pos)
+    //point_h_zone_start_index := bar_index + anchor_offset
+    point_h_zone_start_index := bar_index + (anchor_offset - (bar_index - point_h_index + rightBars))
+    point_h_zone_end_index := bar_index + (anchor_offset - rightBars) + rightBars
+
+if not na(ph_low)
+    point_l_index := bar_index
+if not na(ph_slope_neg)
+    //point_l_zone_start_index := bar_index + anchor_offset
+    point_l_zone_start_index := bar_index + (anchor_offset - (bar_index - point_l_index + rightBars))
+    point_l_zone_end_index := bar_index + (anchor_offset - rightBars) + rightBars
+
+
+
+bgcolor(point_h_zone_start_index <= bar_index and bar_index <= point_h_zone_end_index ? color.new(color.red,85) : na, offset = -anchor_offset, force_overlay = true)
+bgcolor(point_l_zone_start_index <= bar_index and bar_index <= point_l_zone_end_index ? color.new(color.green,85) : na, offset = -anchor_offset, force_overlay = true)
+
+// var chart.point point_price = na
+// var chart.point point_slope = na
+
+// if not na(ph_high)
+//     point_price := chart.point.now(ph_high)
+// if not na(ph_slope)
+//     point_slope := chart.point.now(ph_high)
+
+if barstate.islast
+    // not available with indicator(timeframe="3")
+    //label.new(point_price, str.format("{0}", point_price.price), yloc = yloc.abovebar, style = label.style_label_up, force_overlay = true)
+    //label.new(point_slope, str.format("{0}", point_price.price), yloc = yloc.abovebar, style = label.style_label_up)
+    na
