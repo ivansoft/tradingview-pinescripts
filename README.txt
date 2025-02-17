@@ -13,8 +13,6 @@ https://www.incrediblecharts.com/technical/dow_theory_trends.php
      trend has not started until there is a lower High and Low
      bull trend started until there is a higher Low and High
 
-
-
 = = = =
 
 Dec 30, 2023
