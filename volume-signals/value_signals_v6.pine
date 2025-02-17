@@ -1,0 +1,116 @@
+// This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © ivansoft
+
+//@version=6
+indicator("Volume Value", "value", format = format.volume, timeframe = "3", overlay = false)
+
+debugLabelUp(txt,overlay=true) =>
+    label.new(bar_index, high, txt, yloc = yloc.abovebar, style = label.style_arrowdown, force_overlay = overlay, textcolor = color.black)
+debugLabelDn(txt,overlay=true) =>
+    label.new(bar_index, low, txt, yloc = yloc.belowbar, style = label.style_arrowup, force_overlay = overlay, textcolor = color.black)
+
+value = volume*hl2
+
+plot(value, color=color.new(color.gray, 50), style=plot.style_columns, title="Value")
+
+
+// 
+// Logic
+//  - fixed timeframe - 3 min
+//  - fixed percentile length - i.e. 2000 bars (3*2000 =~ 5 days)
+//  - analisys volume (value) data on current 3 min tf
+//  - do not request volume data from larger tf - use cumulative math.sum
+//  - not anought bars (max 5000 bars) to access the history[] to calc percentile - use request.security from larger tf
+//  - example: cumsum = math.sum(value, 30); p99 needs 2000*30; 30 = 90 min; 90 min = 3 * 30; request.security("30",math.sum(value,3))
+//
+
+var simple int day1length = math.ceil(1*24*60*60 / timeframe.in_seconds("60"))
+var simple int day2length = math.ceil(2*24*60*60 / timeframe.in_seconds("60"))
+var simple int day7length = math.ceil(7*24*60*60 / timeframe.in_seconds("60"))
+var simple int day31length = math.ceil(31*24*60*60 / timeframe.in_seconds("60"))
+
+var int daylength = switch
+    timeframe.in_seconds() < 1*60 => math.ceil(1*24*60*60 / timeframe.in_seconds())              // < 1min  - 1days  - seconds 1 day
+    timeframe.in_seconds() < 15*60 => math.ceil(5*24*60*60 / timeframe.in_seconds())             // < 1hrs  - 7days  - minutes 1 week
+    timeframe.in_seconds() < 45*60 => math.ceil(10*24*60*60 / timeframe.in_seconds())             // < 1hrs  - 7days  - minutes 1 week
+    timeframe.in_seconds() < 1*60*60 => math.ceil(25*24*60*60 / timeframe.in_seconds())          // < 1hrs  - 15days - minutes 1 week
+    timeframe.in_seconds() < 1*24*60*60 => math.ceil(31*24*60*60 / timeframe.in_seconds())       // < 1day  - 31days - hours 1 month
+    timeframe.in_seconds() < 7*24*60*60 => math.ceil(365*24*60*60 / timeframe.in_seconds())      // < 7day  - 365days - days 1 year
+    => last_bar_index + 1  // all (last_bar_index is series)                                     //                   - weeks all
+
+p99 = ta.percentile_nearest_rank(value, daylength, 99)
+plot(p99, color=color.new(color.blue, 25), style=plot.style_line, title="p99")
+
+anchor = timeframe.change("1D")
+vwap = ta.vwap(hl2) // "1D" is default
+plot(vwap, force_overlay = true)
+
+vema = ta.ema(value, 2)
+vcum = math.sum(vema, 3)
+plot(vcum, color=color.new(color.blue, 50), style=plot.style_line, title="cum")
+cp97 = ta.percentile_nearest_rank(vcum, daylength, 97)
+plot(cp97, color=color.new(color.gray, 25), style=plot.style_line, title="cp97")
+
+
+
+
+
+const color NO_COLOR = color(na)
+
+calculation() =>
+    isbig = value >= p99
+    iscum = vcum >= cp97
+    isfalling = ta.falling(vcum, 1)
+    bars_val = ta.barssince(ta.change(isbig) and isbig)
+    bars_cum = ta.barssince(not iscum)
+    bars_end = ta.barssince(iscum)
+    bars_rising = ta.barssince(ta.change(isfalling) and isfalling)
+    if timestamp(2024,12,04) <= time and time <= timestamp(2024,12,06)
+        //if bars_val >= 0 or bars_cum >=0
+        debugLabelDn(str.format("{0}\n{1}\n{2}\n{3}\n{4}\n{5}", bars_val, bars_cum, bars_end, bars_rising, isbig?"-=T=-":"F", iscum?"-=T=-":"F"))
+
+    iscum
+
+isbgcolor = calculation()
+
+// var bool isvcumabove97_flag = false
+// if isvcumabove97
+//     isvcumabove97_flag := true
+// var bool isvalueabove99_flag = false
+// if isvalueabove99
+//     isvalueabove99_flag := true
+// // if isvalueabove99_flag and not isvcumabove97
+// //     isvalueabove99_flag := false
+
+// var int backoffset = 0
+// bars_valueflag99 = ta.barssince(isvalueabove99_flag)
+// bars_vcumabove97 = ta.barssince(isvcumabove97)
+// bars_offset = bars_valueflag99 - bars_vcumabove97
+// if bars_offset > 0 and backoffset == 0
+//     backoffset := bars_offset
+
+
+// if isvcumabove97
+//     backoffset := bars_valueflag99
+
+
+
+
+bgcolor(isbgcolor ? color.new(color.blue, 85) : NO_COLOR, offset = -3)
+bgcolor(isbgcolor ? color.new(color.blue, 85) : NO_COLOR, force_overlay = true, title = "COMMENT")
+
+
+// Debug
+if barstate.islast
+    debugLabelDn(str.format("{0}\n{1}",daylength,day31length))
+
+// calc volume 
+//  0) 60 - 1 min ?
+//  1) 180 - 3 min
+//  2) 3600 - 1 hour
+//  3) 86400 - 1 day
+// 
+// base - 1 hour ?
+//  if val1h > p99 : remember day -> calculate val1d to the end of day 
+// 
+
