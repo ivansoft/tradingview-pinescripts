@@ -2,7 +2,7 @@
 // © ivansoft
 
 //@version=6
-indicator("Test LTF History", "test_ltf", format = format.volume, overlay = false)
+indicator("LTF History", "ltf_depth", format = format.volume, overlay = false)
 
 debugLabelUp(txt,overlay=true) =>
     label.new(bar_index, high, txt, yloc = yloc.abovebar, style = label.style_arrowdown, force_overlay = overlay, textcolor = color.black)
