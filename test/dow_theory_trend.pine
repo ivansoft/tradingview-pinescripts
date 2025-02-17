@@ -1,6 +1,79 @@
-//@version=5
+//@version=6
 indicator("dow_trend", overlay = true)
 
-// Dow's definition of Trend
-plotchar(high < high[1], char = "v", location = location.abovebar, color = color.new(color.red,50), size = size.tiny, display = display.pane)
-plotchar(low > low[1], char = "^", location = location.belowbar, color = color.new(color.green,0), size = size.tiny, display = display.pane)
+debugLabelUp(txt,overlay=true) => label.new(bar_index, high, txt, yloc = yloc.abovebar, style = label.style_arrowdown, force_overlay = overlay, textcolor = color.black)
+debugLabelDn(txt,overlay=true) => label.new(bar_index, low, txt, yloc = yloc.belowbar, style = label.style_arrowup, force_overlay = overlay, textcolor = color.black)
+
+var string highframePeriod = switch
+    //timeframe.isseconds => "5"
+    //timeframe.isminutes => 
+    //    switch
+    //        => ""
+    //=> timeframe.from_seconds(timeframe.in_seconds() * 10)
+    => "60"
+
+//indexHighTF = barstate.isrealtime ? 1 : 0
+//indexCurrTF = barstate.isrealtime ? 0 : 1
+[lowH, highH] = request.security(syminfo.tickerid, highframePeriod, [low, high], lookahead=barmerge.lookahead_on, gaps = barmerge.gaps_off)
+
+plot(lowH, style = plot.style_line, linewidth = 1)
+plot(highH, style = plot.style_line, linewidth = 1)
+
+var _lowsH = array.new<float>()
+var _highsH = array.new<float>()
+if timeframe.change(highframePeriod)
+    array.unshift(_lowsH, lowH)
+    array.unshift(_highsH, highH)
+// plot(_lowsH.size() > 1 ? array.get(_lowsH, 1) : na, style = plot.style_circles, linewidth = 1)
+// plot(_highsH.size() > 1 ? array.get(_highsH, 1) : na, style = plot.style_circles, linewidth = 1)
+
+//
+// Charles Dow's definition of Trend
+//
+// https://www.incrediblecharts.com/technical/dow_theory_trends.php
+//   Bull Trends - successive higher highs and higher lows
+//      Start = higher Low + break above previous High.
+//      End = lower High + break below previous Low.
+//   Bear Trends - successive lower highs and lower lows.
+//     ...
+//   Large Corrections
+//      ... ? trend start vs correction ? ...
+//      trend has not started until there is a lower High and Low
+//      bull trend started until there is a higher Low and High
+//
+
+//isuptrend =  _lowsH.get(1) < low
+//isdowntrend = _highsH.get(1) > high
+//isuptrend = _lowsH.size() > 1 ? _lowsH.get(1) < low and _highsH.get(1) < high : false
+//isdowntrend = _highsH.size() > 1 ? _highsH.get(1) > high and _lowsH.get(1) > low : false
+isuptrend = _lowsH.size() > 2 ? 
+     _lowsH.get(2) < _lowsH.get(1) and 
+     _lowsH.get(1) < _lowsH.get(0) and 
+     _highsH.get(1) < close 
+     : false
+isdowntrend = _highsH.size() > 2 ?
+     _highsH.get(2) > _highsH.get(1) and 
+     _highsH.get(1) > _highsH.get(0) and 
+     _lowsH.get(1) > close 
+     : false
+
+enum trend
+    up
+    down
+    flat
+
+state_trend = switch
+    isuptrend => trend.up
+    isdowntrend => trend.down
+    => trend.flat
+
+plotchar(isuptrend, char = "^", location = location.belowbar, color = color.new(color.green,0), size = size.tiny, display = display.pane)
+plotchar(isdowntrend, char = "v", location = location.abovebar, color = color.new(color.red,50), size = size.tiny, display = display.pane)
+
+//var color bgcolor_trend = na
+bgcolor_trend = switch state_trend
+    trend.up => color.new(color.green, 85)
+    trend.down => color.new(color.red, 85)
+    trend.flat => color.new(color.gray, 85)
+
+bgcolor(bgcolor_trend)

@@ -1,6 +1,19 @@
 https://www.tradingview.com/pine-script-docs/
 https://www.tradingview.com/pine-script-reference/
 
+= = = =
+
+Feb 14, 2025
+
+https://www.incrediblecharts.com/technical/dow_theory_trends.php
+  Bull Trends - successive higher highs and higher lows
+     Start = higher Low + break above previous High.
+     End = lower High + break below previous Low.
+  Large Corrections
+     trend has not started until there is a lower High and Low
+     bull trend started until there is a higher Low and High
+
+
 
 = = = =
 
