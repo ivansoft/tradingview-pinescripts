@@ -1,77 +1,150 @@
-// This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
-// © ivansoft
-
 //@version=6
 indicator("Volume Value", "value", format = format.volume, timeframe = "3", overlay = false)
 
-debugLabelUp(txt,overlay=true) =>
-    label.new(bar_index, high, txt, yloc = yloc.abovebar, style = label.style_arrowdown, force_overlay = overlay, textcolor = color.black)
-debugLabelDn(txt,overlay=true) =>
-    label.new(bar_index, low, txt, yloc = yloc.belowbar, style = label.style_arrowup, force_overlay = overlay, textcolor = color.black)
+var int inputBarsPercentile = input.int(2000, "Bars Percientile", inline = "00")  // (2000/272 =~ 7 days)
+var int inputBarsCumulative = input.int(5, "Bars Cumulative", inline = "01")     // (10)
+var float inputPercentileCumulative = input.float(99, "%", inline = "01")
+var string inputPeriodCumulativeH = input.string("15", "HTF Cum% Period", inline = "02")  // ("30")
+var int inputBarsCumulativeH = input.int(1, "Bars", inline = "02")
+var bool inputDefaultAllInvert = input.bool(false, "Invert On/Off All Inputs", group = "Show/Hide")
+var bool _inputShowValueLevels = input.bool(true, "Value", group = "Show/Hide", inline = "0")
+var bool _inputShowValueLevelP99 = input.bool(true, "P99", group = "Show/Hide", inline = "0")
+var bool _inputShowValueLevelP100 = input.bool(true, "P100", group = "Show/Hide", inline = "0")
+var bool _inputShowCumulative = input.bool(true, "Cumulative", group = "Show/Hide", inline = "1")
+var bool _inputShowCumulativeVolume = input.bool(true, "Volume", group = "Show/Hide", inline = "1")
+var bool _inputShowCumulativeLevelP99 = input.bool(true, "P99", group = "Show/Hide", inline = "1")
+var bool _inputShowVwap = input.bool(true, "VWAP", group = "Show/Hide", inline = "2")
+var bool _inputShowVwapMain = input.bool(true, "Main", group = "Show/Hide", inline = "2")
+var bool _inputShowVwapStdDev = input.bool(true, "StdDev", group = "Show/Hide", inline = "2")
+var float inputVwapStdDevMult = input.float(2.0, title='Mult', display = display.none, group = "Show/Hide", inline = "2")
+var bool _inputShowColoredBackground = input.bool(true, "Background Highlights", group = "Show/Hide")
 
-value = volume*hl2
+var bool inputShowValueLevels = inputDefaultAllInvert ? not _inputShowValueLevels : _inputShowValueLevels
+var bool inputShowValueLevelP99 = inputDefaultAllInvert ? not _inputShowValueLevelP99 : _inputShowValueLevelP99
+var bool inputShowValueLevelP100 = inputDefaultAllInvert ? not _inputShowValueLevelP100 : _inputShowValueLevelP100
+var bool inputShowCumulative = inputDefaultAllInvert ? not _inputShowCumulative : _inputShowCumulative
+var bool inputShowCumulativeVolume = inputDefaultAllInvert ? not _inputShowCumulativeVolume : _inputShowCumulativeVolume
+var bool inputShowCumulativeLevelP99 = inputDefaultAllInvert ? not _inputShowCumulativeLevelP99 : _inputShowCumulativeLevelP99
+var bool inputShowVwap = inputDefaultAllInvert ? not _inputShowVwap : _inputShowVwap
+var bool inputShowVwapMain = inputDefaultAllInvert ? not _inputShowVwapMain : _inputShowVwapMain
+var bool inputShowVwapStdDev = inputDefaultAllInvert ? not _inputShowVwapStdDev : _inputShowVwapStdDev
+var bool inputShowColoredBackground = inputDefaultAllInvert ? not _inputShowColoredBackground : _inputShowColoredBackground
 
-plot(value, color=color.new(color.gray, 50), style=plot.style_columns, title="Value")
+var bool isPlotP99 = inputShowValueLevels and inputShowValueLevelP99
+var bool isPlotP100 = inputShowValueLevels and inputShowValueLevelP100
+var bool isPlotCumV = inputShowCumulative and inputShowCumulativeVolume
+var bool isPlotCumP99 = inputShowCumulative and inputShowCumulativeLevelP99
+var bool isPlotVwap = inputShowVwap and inputShowVwapMain
+var bool isPlotStd = inputShowVwap and inputShowVwapStdDev
 
+var displayMode = display.data_window + display.pane
+var displayOverlayMode = display.pane
 
-// 
-// Logic
-//  - fixed timeframe - 3 min
-//  - fixed percentile length - i.e. 2000 bars (3*2000 =~ 5 days)
-//  - analisys volume (value) data on current 3 min tf
-//  - do not request volume data from larger tf - use cumulative math.sum
-//  - not anought bars (max 5000 bars) to access the history[] to calc percentile - use request.security from larger tf
-//  - example: cumsum = math.sum(value, 30); p99 needs 2000*30; 30 = 90 min; 90 min = 3 * 30; request.security("30",math.sum(value,3))
-//
-
-var simple int day1length = math.ceil(1*24*60*60 / timeframe.in_seconds("60"))
-var simple int day2length = math.ceil(2*24*60*60 / timeframe.in_seconds("60"))
-var simple int day7length = math.ceil(7*24*60*60 / timeframe.in_seconds("60"))
-var simple int day31length = math.ceil(31*24*60*60 / timeframe.in_seconds("60"))
-
-var int daylength = switch
-    timeframe.in_seconds() < 1*60 => math.ceil(1*24*60*60 / timeframe.in_seconds())              // < 1min  - 1days  - seconds 1 day
-    timeframe.in_seconds() < 15*60 => math.ceil(5*24*60*60 / timeframe.in_seconds())             // < 1hrs  - 7days  - minutes 1 week
-    timeframe.in_seconds() < 45*60 => math.ceil(10*24*60*60 / timeframe.in_seconds())             // < 1hrs  - 7days  - minutes 1 week
-    timeframe.in_seconds() < 1*60*60 => math.ceil(25*24*60*60 / timeframe.in_seconds())          // < 1hrs  - 15days - minutes 1 week
-    timeframe.in_seconds() < 1*24*60*60 => math.ceil(31*24*60*60 / timeframe.in_seconds())       // < 1day  - 31days - hours 1 month
-    timeframe.in_seconds() < 7*24*60*60 => math.ceil(365*24*60*60 / timeframe.in_seconds())      // < 7day  - 365days - days 1 year
-    => last_bar_index + 1  // all (last_bar_index is series)                                     //                   - weeks all
-
-p99 = ta.percentile_nearest_rank(value, daylength, 99)
-plot(p99, color=color.new(color.blue, 25), style=plot.style_line, title="p99")
-
-anchor = timeframe.change("1D")
-vwap = ta.vwap(hl2) // "1D" is default
-plot(vwap, force_overlay = true)
-
-vema = ta.ema(value, 2)
-vcum = math.sum(vema, 3)
-plot(vcum, color=color.new(color.blue, 50), style=plot.style_line, title="cum")
-cp97 = ta.percentile_nearest_rank(vcum, daylength, 97)
-plot(cp97, color=color.new(color.gray, 25), style=plot.style_line, title="cp97")
+// Helpers
+// debugLabelUp(txt,overlay=true) =>
+//     label.new(bar_index, high, txt, yloc = yloc.abovebar, style = label.style_arrowdown, textcolor = color.black, force_overlay = overlay)
+// debugLabelDn(txt,overlay=true) =>
+//     label.new(bar_index, low, txt, yloc = yloc.belowbar, style = label.style_arrowup, textcolor = color.black, force_overlay = overlay)
 
 
+// IRUS realtime bar Volume is 0
+value = volume == 0.0 ? na : volume*hl2
 
+p99 = ta.percentile_nearest_rank(value, inputBarsPercentile, 99)
+p100 = ta.percentile_nearest_rank(value, inputBarsPercentile, 100)
+
+colorplotvalue = switch
+    value >= p100 => color.new(color.purple, 50)
+    value >= p99 => color.new(color.blue, 50)
+    => color.new(color.gray, 50)
+
+plot(value, color=colorplotvalue, style=plot.style_columns, title="Value")
+plot(isPlotP99 ? p99 : na, color=color.new(color.blue, 25), style=plot.style_line, title="p99v", display = displayMode, editable = false)
+plot(isPlotP100 ? p100 : na, color=color.new(color.purple, 25), style=plot.style_line, title="p100v", display = displayMode, editable = false)
+
+
+vcum = math.sum(value, inputBarsCumulative)
+// vcumsma = vcum //ta.sma(vcum, 3)
+// valuesma = value //ta.sma(value, 3)
+// plot(vcumsma)
+// plot(valuesma)
+vcumrising = true //not ta.falling(vcumsma, 1)
+valuerising = true //not ta.falling(valuesma, 1)
+// vcumrising = switch
+//     _vcumrising[1] and not _vcumrising[0] => true
+//     not _vcumrising[1] and _vcumrising[0] => false
+//     => _vcumrising
+
+p99cum = request.security(syminfo.tickerid, inputPeriodCumulativeH, ta.percentile_nearest_rank(
+     math.sum(value, inputBarsCumulativeH),
+     inputBarsPercentile, inputPercentileCumulative
+     ))
+
+plot(isPlotCumV ? vcum : na, color=color.new(color.olive, 50), style=plot.style_line, title="cum", display = displayMode, editable = false)
+plot(isPlotCumP99 ? p99cum : na, color=color.new(color.gray, 25), style=plot.style_line, title="p99cum", display = displayMode, editable = false)
 
 
 const color NO_COLOR = color(na)
+bgcolor = switch
+    value >= p100 => color.new(color.purple, 85)
+    value >= p99 => color.new(color.blue, 85)
+    vcum >= p99cum and vcumrising and valuerising => color.new(color.olive, 85)
+    //vcum >= p100 => color.new(color.gray, 85)
+    //vcum >= p99 => color.new(color.gray, 95)
+    => NO_COLOR
+bgcolor(inputShowColoredBackground ? bgcolor : na, editable = false)
+bgcolor(inputShowColoredBackground ? bgcolor : na, editable = false, force_overlay = true)
 
-calculation() =>
-    isbig = value >= p99
-    iscum = vcum >= cp97
-    isfalling = ta.falling(vcum, 1)
-    bars_val = ta.barssince(ta.change(isbig) and isbig)
-    bars_cum = ta.barssince(not iscum)
-    bars_end = ta.barssince(iscum)
-    bars_rising = ta.barssince(ta.change(isfalling) and isfalling)
-    if timestamp(2024,12,04) <= time and time <= timestamp(2024,12,06)
-        //if bars_val >= 0 or bars_cum >=0
-        debugLabelDn(str.format("{0}\n{1}\n{2}\n{3}\n{4}\n{5}", bars_val, bars_cum, bars_end, bars_rising, isbig?"-=T=-":"F", iscum?"-=T=-":"F"))
+// bgcolor_cum = switch
+//     vcum >= p99cum => color.new(color.olive, 85)
+//     vcum >= p100 => color.new(color.gray, 85)
+//     vcum >= p99 => color.new(color.gray, 95)
+//     => NO_COLOR
+//bgcolor(bgcolor_cum, editable = false)
+//bgcolor(bgcolor_cum, editable = false, force_overlay = true)
 
-    iscum
 
-isbgcolor = calculation()
+oc2 = (open + close) / 2
+
+//anchor = timeframe.change("1D")
+[vwap, upper, lower] = ta.vwap(oc2, timeframe.change("D"), inputVwapStdDevMult) // anchor "1D" is default
+plot(isPlotVwap ? vwap : na, display = displayOverlayMode, editable = false, force_overlay = true)
+plot(isPlotStd ? upper : na, color = color.gray, display = displayOverlayMode, editable = false, force_overlay = true)
+plot(isPlotStd ? lower : na, color = color.gray, display = displayOverlayMode, editable = false, force_overlay = true)
+
+
+
+// // closesma = ta.sma(close, 4)
+// // plot(closesma, force_overlay = true)
+// calcpivots() =>
+//     var pivots_h = array.new<float>()
+//     var pivots_l = array.new<float>()
+//     fractalhigh = ta.pivothigh(high, 2, 2)
+//     fractallow = ta.pivotlow(low, 2, 2)
+//     if not na(fractalhigh)
+//         pivots_h.unshift(fractalhigh)
+//     if not na(fractallow)
+//         pivots_l.unshift(fractallow)
+//     rising = false
+//     falling = false
+//     if pivots_h.size() > 2
+//         rising := pivots_l.get(1) < pivots_l.get(0) and pivots_h.get(1) < pivots_h.get(0) and pivots_h.get(0) < close[0]
+//     if pivots_l.size() > 2
+//         falling := pivots_h.get(1) > pivots_h.get(0) and pivots_l.get(1) > pivots_l.get(0) and pivots_l.get(0) > close[0]
+//     [rising, falling]
+// [pricerising, pricefalling] = calcpivots()
+// // plot(ta.pivothigh(high, 2, 2), style = plot.style_cross, linewidth = 3, force_overlay = true, offset = -2)
+// // plot(ta.pivotlow(low, 2, 2), style = plot.style_cross, linewidth = 3, force_overlay = true, offset = -2)
+// // pricerising = fractallow[1] < fractallow[0] and fractalhigh[1] < fractalhigh[0]
+// // pricefalling = fractalhigh[1] > fractalhigh[0] and fractallow[1] > fractallow[0]
+// // anysignal = value >= p100 or value >= p99 or vcum >= p99cum
+// plotchar(pricefalling, char = "v", location = location.abovebar, color = color.new(color.red,50), size = size.tiny, display = display.pane, force_overlay = true)
+// plotchar(pricerising, char = "^", location = location.belowbar, color = color.new(color.green,0), size = size.small, display = display.pane, force_overlay = true)
+
+
+
+//var simple int offset = 3
+//vema = ta.ema(value, 2)
 
 // var bool isvcumabove97_flag = false
 // if isvcumabove97
@@ -95,14 +168,57 @@ isbgcolor = calculation()
 
 
 
-
-bgcolor(isbgcolor ? color.new(color.blue, 85) : NO_COLOR, offset = -3)
-bgcolor(isbgcolor ? color.new(color.blue, 85) : NO_COLOR, force_overlay = true, title = "COMMENT")
-
-
 // Debug
-if barstate.islast
-    debugLabelDn(str.format("{0}\n{1}",daylength,day31length))
+
+// 
+// Logic
+//  - fixed timeframe - 3 min
+//  - fixed percentile length - i.e. 2000 bars (2000/272 =~ 7 days)
+//  - analisys volume (value) data on current 3 min tf
+//  - do not request volume data from larger tf - use cumulative math.sum
+//  - not anought bars (max 5000 bars) to access the history[] to calc percentile - use request.security from larger tf
+//  - example: cumsum = math.sum(value, 30); p99 needs 2000*30; 30 = 90 min; 90 min = 3 * 30; request.security("30",math.sum(value,3))
+//
+
+var simple int day1length = math.ceil(1*24*60*60 / timeframe.in_seconds("60"))
+var simple int day2length = math.ceil(2*24*60*60 / timeframe.in_seconds("60"))
+var simple int day7length = math.ceil(7*24*60*60 / timeframe.in_seconds("60"))
+var simple int day31length = math.ceil(31*24*60*60 / timeframe.in_seconds("60"))
+
+var int daylength = switch
+    timeframe.in_seconds() < 1*60 => math.ceil(1*24*60*60 / timeframe.in_seconds())             // < 1min   - 1days   - seconds 1 day
+    timeframe.in_seconds() < 2*60 => math.ceil(2*24*60*60 / timeframe.in_seconds())             // < 2min   - 2days   - minutes 1 week
+    timeframe.in_seconds() < 3*60 => math.ceil(4*24*60*60 / timeframe.in_seconds())             // < 3min   - 4days   - minutes 1 week
+    timeframe.in_seconds() < 5*60 => math.ceil(5*24*60*60 / timeframe.in_seconds())             // < 5min   - 5days   - minutes 1 week
+    timeframe.in_seconds() < 10*60 => math.ceil(6*24*60*60 / timeframe.in_seconds())            // < 10min  - 6days   - minutes 1 week
+    timeframe.in_seconds() < 15*60 => math.ceil(7*24*60*60 / timeframe.in_seconds())            // < 15min  - 7days   - minutes 1 week
+    timeframe.in_seconds() < 30*60 => math.ceil(8*24*60*60 / timeframe.in_seconds())            // < 30min  - 8days   - minutes 1 week
+    timeframe.in_seconds() < 45*60 => math.ceil(10*24*60*60 / timeframe.in_seconds())           // < 45min  - 10days  - minutes 1 week
+    timeframe.in_seconds() < 1*60*60 => math.ceil(25*24*60*60 / timeframe.in_seconds())         // < 1hrs   - 15days  - minutes 1 week
+    timeframe.in_seconds() < 1*24*60*60 => math.ceil(31*24*60*60 / timeframe.in_seconds())      // < 1day   - 31days  - hours 1 month
+    timeframe.in_seconds() < 7*24*60*60 => math.ceil(365*24*60*60 / timeframe.in_seconds())     // < 7day   - 365days - days 1 year
+    => last_bar_index + 1  // all (last_bar_index is series)                                    //                    - weeks all
+
+var bars_count = 0
+
+// Self-Check
+// if barstate.isfirst
+//     debugLabelDn(str.format("{0}\n{1}", bar_index, bars_count))
+
+bars_count := bars_count + 1
+
+calcdaybars() =>
+    var daybars = array.new<float>()
+    daychange = ta.change(dayofweek) != 0
+    daychangebars = ta.barssince(daychange)
+    if daychange
+        daybars.push(daychangebars[1])
+    daybars.size() > 0 ? daybars.median() : na
+//daybars = calcdaybars()
+
+// if barstate.islastconfirmedhistory
+//     debugLabelDn(str.format("{0}\n{1}\n{2}", daylength, day31length, daybars))
+
 
 // calc volume 
 //  0) 60 - 1 min ?
