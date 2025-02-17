@@ -1,23 +1,26 @@
 //@version=6
 indicator("dow_trend", overlay = true)
 
-debugLabelUp(txt,overlay=true) => label.new(bar_index, high, txt, yloc = yloc.abovebar, style = label.style_arrowdown, force_overlay = overlay, textcolor = color.black)
-debugLabelDn(txt,overlay=true) => label.new(bar_index, low, txt, yloc = yloc.belowbar, style = label.style_arrowup, force_overlay = overlay, textcolor = color.black)
+inputBarsHtfMultSelected = input.bool(false, "HTF Multiplier", inline = "01")
+inputBarsHtfMult = input.int(20, "", inline = "01")
+inputBarsHtfPeriodSelected = input.bool(true, "HTF Period", inline = "02")
+inputBarsHtfPeriod = input.string("D", "", inline = "02")
 
 var string highframePeriod = switch
     //timeframe.isseconds => "5"
     //timeframe.isminutes => 
     //    switch
     //        => ""
-    //=> timeframe.from_seconds(timeframe.in_seconds() * 10)
-    => "60"
+    inputBarsHtfPeriodSelected => inputBarsHtfPeriod
+    => timeframe.from_seconds(timeframe.in_seconds() * inputBarsHtfMult)
+    //=> "60"
 
 //indexHighTF = barstate.isrealtime ? 1 : 0
 //indexCurrTF = barstate.isrealtime ? 0 : 1
 [lowH, highH] = request.security(syminfo.tickerid, highframePeriod, [low, high], lookahead=barmerge.lookahead_on, gaps = barmerge.gaps_off)
 
-plot(lowH, style = plot.style_line, linewidth = 1)
-plot(highH, style = plot.style_line, linewidth = 1)
+plot(lowH, "lowH", style = plot.style_line, linewidth = 1)
+plot(highH, "highH", style = plot.style_line, linewidth = 1)
 
 var _lowsH = array.new<float>()
 var _highsH = array.new<float>()
