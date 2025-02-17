@@ -1,0 +1,13 @@
+//@version=6
+indicator("Bars per Day", "daylength", format = format.price, overlay = false)
+
+
+var int daylength = na
+daychange = ta.change(dayofmonth) != 0
+daychangelength = ta.barssince(daychange)
+if daychange
+    daylength := daychangelength[1]
+
+plot(daylength)
+
+//plot(daychangelength, color = color.new(color.gray, 50))
