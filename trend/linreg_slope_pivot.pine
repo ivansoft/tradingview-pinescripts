@@ -88,10 +88,12 @@ const int anchor_offset = 50
 
 ph_high = ta.pivothigh(high, leftBars, rightBars)
 ph_slope_pos = ta.pivothigh(slope_pos, leftBars, rightBars)
-ph_high := slope > 0 ? ph_high : na
+ph_high := slope >= 0.01 ? ph_high : na
+ph_slope_pos := slope >= 0.01 ? ph_slope_pos : na
 ph_low = ta.pivotlow(low, leftBars, rightBars)
 ph_slope_neg = ta.pivotlow(-slope_neg, leftBars, rightBars)
-ph_low := slope < 0 ? ph_low : na
+ph_low := slope <= -0.01 ? ph_low : na
+ph_slope_neg := slope <= -0.01 ? ph_slope_neg : na
 
 //plot(ph_high, style = plot.style_circles, linewidth = 6, force_overlay = true, offset = -rightBars)
 //plot(ph_slope_pos, style = plot.style_circles, linewidth = 6, offset = -rightBars)
