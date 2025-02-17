@@ -1,12 +1,16 @@
 //@version=6
-indicator("Price Spike Detector", "price_spike", format = format.price, overlay = false)
+indicator("Price Spike Detector", "price_spike", timeframe = "3", format = format.price, overlay = false)
 
-int inputLengthPercentile = input.int(2500, "percentile lenght")
+int inputLengthPercentile = input.int(1500, "percentile lenght")
 int inputLengthCum = input.int(3, "cumulative lenght")
 
 //price_change = high - low
 //price_change = na(high[1]) ? high-low : math.max(math.max(high - low, math.abs(high - close[1])), math.abs(low - close[1]))  // trueRange
-price_change = nz(math.max(math.abs(open-close), math.abs(open-close[1]), math.abs(close-close[1])))
+price_change = nz(math.max(
+     math.abs(open-close),
+     math.abs(open-close[1]),
+     math.abs(close-close[1])
+ ))
 
 price_change_positive = close > open or close > close[1] ? price_change : 0
 price_change_negative = close < open or close < close[1] ? price_change : 0
@@ -38,8 +42,8 @@ cum_neg = math.sum(price_change_negative, inputLengthCum)
 plot(cum_pos, "+cum", color = color.new(color.olive,75))
 plot(-cum_neg, "-cum", color = color.new(color.olive,75))
 
-cum_positive_p99 = ta.percentile_nearest_rank(cum_pos, inputLengthPercentile, 99.75)
-cum_negative_p99 = ta.percentile_nearest_rank(cum_neg, inputLengthPercentile, 99.75)
+cum_positive_p99 = ta.percentile_nearest_rank(cum_pos, inputLengthPercentile, 99)
+cum_negative_p99 = ta.percentile_nearest_rank(cum_neg, inputLengthPercentile, 99)
 
 plot(cum_positive_p99, "+cumP99", color = color.new(color.olive,75))
 plot(-cum_negative_p99, "-cumP99", color = color.new(color.olive,75))
