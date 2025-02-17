@@ -16,9 +16,12 @@ debugLabelDn(txt,overlay=true) =>
 var bars_count = 0
 
 // The history-referencing length for the expression must be a value between 0 and 5000.
+if bars_count == 4000
+    debugLabelUp(str.format("{2}\n{1}\n{0}",bar_index,valreq[5000], str.format_time(timereq[5000])))
+    debugLabelDn(str.format("{0}\n{1}\n{2}",bar_index,array.size(arrValreq), str.format_time(timereq[0]) ))
 if bars_count == 5000
     debugLabelUp(str.format("{2}\n{1}\n{0}",bar_index,valreq[5000], str.format_time(timereq[5000])))
-    debugLabelDn(str.format("{0}\n{1}",bar_index,array.size(arrValreq)))
+    debugLabelDn(str.format("{0}\n{1}\n{2}",bar_index,array.size(arrValreq), str.format_time(timereq[0]) ))
 
 // First bar with Lower Timeframe data available
 if array.size(arrValreq) > 0
@@ -31,5 +34,9 @@ if array.size(arrValreq) > 0
 // Self-Check
 if barstate.isfirst
     debugLabelDn(str.format("{0}\n{1}", bar_index, bars_count))
+
+if barstate.islastconfirmedhistory
+    debugLabelDn(str.format("{0}\n{1}", bar_index, bars_count))
+
 
 bars_count := bars_count + 1
