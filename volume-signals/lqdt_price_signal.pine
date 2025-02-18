@@ -12,7 +12,8 @@ strPrice(float v) =>
 
 
 var float dayprice = na
-
+// var float dayopenhigh = na
+// var float dayopenlow = na
 var float dayhigh = na
 var float daylow = na
 
@@ -32,24 +33,51 @@ if daychange
     dayprice := open
     dayhigh := dayprice
     daylow := dayhigh - syminfo.mintick
+    // dayopenhigh := dayhigh
+    // dayopenlow := daylow
 
 
 bool pressure_down = false
 bool pressure_up = false
 
-pressure_down := high == low ? pressure_down[1] : high <= dayhigh and (
-     low < low[1] or
-     low < daylow
-     ) and not daychange
+// pressure_down := high == low ? pressure_down[1] :
+//      (low < daylow or
+//       (high - low > syminfo.mintick and dayopenhigh == high)
+//      ) and not daychange
+// pressure_up := high == low ? pressure_up[1] : 
+//      (high > dayhigh or
+//       (high - low > syminfo.mintick)
+//      ) and not daychange
 
-pressure_up := high == low ? pressure_up[1] : low >= daylow and (
-     high > high[1] or
-     high > dayhigh
-     ) and not daychange
+// if low != high and low == daylow and high != dayhigh
+//     dayhigh := high
+// if low != high and high == dayhigh and low != daylow
+//     daylow := low
+
+// if pressure_down
+//     daylow := low
+// if pressure_up
+//     dayhigh := high
+
+float phigh = na
+float plow = na
+phigh := high == low ? phigh[1] : high
+plow := high == low ? plow[1] : low
+//plot(phigh, style = plot.style_circles, color = color.new(color.green,0), linewidth = 12)
+//plot(plow, style = plot.style_circles, color = color.new(color.red,0), linewidth = 8)
+
+pressure_down := not daychange and
+     plow < plow[1] or
+     (plow == plow[1] and phigh == phigh[1] and phigh - plow > syminfo.mintick and plow < daylow)
+pressure_up := not daychange and
+     plow > plow[1] or (phigh > phigh[1] and plow == plow[1]) or
+     (plow == plow[1] and phigh == phigh[1] and phigh - plow > syminfo.mintick and phigh > dayhigh)
+
+plotchar(pressure_down, char = "v", location = location.abovebar, color = color.new(color.red,50), size = size.normal)
+plotchar(pressure_up, char = "^", location = location.belowbar, color = color.new(color.green,0), size = size.normal)
 
 
-
-plotchar(ta.change(pressure_down) and pressure_down, char = "v", location = location.abovebar, color = color.new(color.red,50), size = size.normal)
-plotchar(ta.change(pressure_up) and pressure_up, char = "^", location = location.belowbar, color = color.new(color.green,0), size = size.normal)
-
-
+if pressure_down
+    alert(str.format("LQDT Pressure DOWN : {0}->{1}", strPrice(plow[1]), strPrice(plow)), alert.freq_all)
+if pressure_up
+    alert(str.format("LQDT Pressure UP : {0}->{1}", strPrice(plow[1]), strPrice(plow)), alert.freq_all)
