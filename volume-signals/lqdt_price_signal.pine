@@ -1,0 +1,55 @@
+//@version=6
+indicator("LQDT Monitor", "LQDT", format = format.price, overlay = true)
+
+debugLabelUp(txt,overlay=true) =>
+    label.new(bar_index, high, txt, yloc = yloc.abovebar, style = label.style_arrowdown, force_overlay = overlay, textcolor = color.black)
+debugLabelDn(txt,overlay=true) =>
+    label.new(bar_index, low, txt, yloc = yloc.belowbar, style = label.style_arrowup, force_overlay = overlay, textcolor = color.black)
+
+strPrice(float v) =>
+    var _strPriceScale = str.repeat("#",math.ceil(math.log10(syminfo.pricescale)))
+    str.format("{0,number,"+"#."+_strPriceScale+"}",v)
+
+
+var float dayprice = na
+
+var float dayhigh = na
+var float daylow = na
+
+daychange = timeframe.change("D")
+
+if daychange
+    if false
+        debugLabelDn(str.format("{0}\n{1}\n{2}\n{3}\n{4}\n{5}\n{6}",
+             strPrice(high),
+             strPrice(syminfo.mintick), 
+             strPrice(syminfo.pointvalue), 
+             strPrice(syminfo.mincontract), 
+             strPrice(syminfo.minmove),
+             strPrice(syminfo.pricescale),
+             strPrice(syminfo.minmove/syminfo.pricescale)
+             ))
+    dayprice := open
+    dayhigh := dayprice
+    daylow := dayhigh - syminfo.mintick
+
+
+bool pressure_down = false
+bool pressure_up = false
+
+pressure_down := high == low ? pressure_down[1] : high <= dayhigh and (
+     low < low[1] or
+     low < daylow
+     ) and not daychange
+
+pressure_up := high == low ? pressure_up[1] : low >= daylow and (
+     high > high[1] or
+     high > dayhigh
+     ) and not daychange
+
+
+
+plotchar(ta.change(pressure_down) and pressure_down, char = "v", location = location.abovebar, color = color.new(color.red,50), size = size.normal)
+plotchar(ta.change(pressure_up) and pressure_up, char = "^", location = location.belowbar, color = color.new(color.green,0), size = size.normal)
+
+
