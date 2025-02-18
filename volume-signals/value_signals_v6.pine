@@ -10,6 +10,7 @@ var bool inputDefaultAllInvert = input.bool(false, "Invert On/Off All Inputs", g
 var bool _inputShowValueLevels = input.bool(true, "Levels", group = "Show/Hide", inline = "0")
 var bool _inputShowValueLevelP99 = input.bool(true, "P99", group = "Show/Hide", inline = "0")
 var bool _inputShowValueLevelP100 = input.bool(true, "P100", group = "Show/Hide", inline = "0")
+var bool _inputShowValueLevelP50 = input.bool(true, "P50", group = "Show/Hide", inline = "0")
 var bool _inputShowCumulative = input.bool(true, "Cumulative", group = "Show/Hide", inline = "1")
 var bool _inputShowCumulativeVolume = input.bool(true, "Volume", group = "Show/Hide", inline = "1")
 var bool _inputShowCumulativeLevelP99 = input.bool(true, "P99", group = "Show/Hide", inline = "1")
@@ -22,6 +23,7 @@ var bool _inputShowColoredBackground = input.bool(true, "Background Highlights",
 var bool inputShowValueLevels = inputDefaultAllInvert ? not _inputShowValueLevels : _inputShowValueLevels
 var bool inputShowValueLevelP99 = inputDefaultAllInvert ? not _inputShowValueLevelP99 : _inputShowValueLevelP99
 var bool inputShowValueLevelP100 = inputDefaultAllInvert ? not _inputShowValueLevelP100 : _inputShowValueLevelP100
+var bool inputShowValueLevelP50 = inputDefaultAllInvert ? not _inputShowValueLevelP50 : _inputShowValueLevelP50
 var bool inputShowCumulative = inputDefaultAllInvert ? not _inputShowCumulative : _inputShowCumulative
 var bool inputShowCumulativeVolume = inputDefaultAllInvert ? not _inputShowCumulativeVolume : _inputShowCumulativeVolume
 var bool inputShowCumulativeLevelP99 = inputDefaultAllInvert ? not _inputShowCumulativeLevelP99 : _inputShowCumulativeLevelP99
@@ -32,33 +34,42 @@ var bool inputShowColoredBackground = inputDefaultAllInvert ? not _inputShowColo
 
 var bool isPlotP99 = inputShowValueLevels and inputShowValueLevelP99
 var bool isPlotP100 = inputShowValueLevels and inputShowValueLevelP100
+var bool isPlotP50 = inputShowValueLevels and inputShowValueLevelP50
 var bool isPlotCumV = inputShowCumulative and inputShowCumulativeVolume
 var bool isPlotCumP99 = inputShowCumulative and inputShowCumulativeLevelP99
 var bool isPlotVwap = inputShowVwap and inputShowVwapMain
 var bool isPlotStd = inputShowVwap and inputShowVwapStdDev
 
+debugLabelUp(txt,overlay=true) =>
+    label.new(bar_index, high, txt, yloc = yloc.abovebar, style = label.style_arrowdown, force_overlay = overlay, textcolor = color.black)
+debugLabelDn(txt,overlay=true) =>
+    label.new(bar_index, low, txt, yloc = yloc.belowbar, style = label.style_arrowup, force_overlay = overlay, textcolor = color.black)
+
+
 var displayMode = display.data_window + display.pane
 var displayOverlayMode = display.pane
-
 
 // IRUS realtime bar Volume is 0
 value = volume == 0.0 ? na : volume*hl2
 
 p99 = ta.percentile_nearest_rank(value, inputBarsPercentile, 99)
 p100 = ta.percentile_nearest_rank(value, inputBarsPercentile, 100)
+p50 = ta.percentile_nearest_rank(value, inputBarsPercentile, 97)
 
 isvalueP100 = value >= p100
 isvalueP99 = value >= p99
+isvalueP50 = value >= p50
 
 colorplotvalue = switch
     isvalueP100 => color.new(color.purple, 50)
     isvalueP99 => color.new(color.blue, 50)
-    => color.new(color.gray, 50)
+    isvalueP50 => color.new(color.gray, 50)
+    => color.new(color.gray, 75)
 
 plot(value, color=colorplotvalue, style=plot.style_columns, title="Value")
 plot(isPlotP99 ? p99 : na, color=color.new(color.blue, 25), style=plot.style_line, title="p99v", display = displayMode, editable = false)
 plot(isPlotP100 ? p100 : na, color=color.new(color.purple, 25), style=plot.style_line, title="p100v", display = displayMode, editable = false)
-
+plot(isPlotP50 ? p50 : na, color=color.new(color.gray, 25), style=plot.style_line, title="p95v", display = displayMode, editable = false)
 
 vcum = math.sum(value, inputBarsCumulative)
 // vcumsma = vcum //ta.sma(vcum, 3)
@@ -103,6 +114,12 @@ plot(isPlotVwap ? vwap : na, display = displayOverlayMode, editable = false, for
 plot(isPlotStd ? upper : na, color = color.gray, display = displayOverlayMode, editable = false, force_overlay = true)
 plot(isPlotStd ? lower : na, color = color.gray, display = displayOverlayMode, editable = false, force_overlay = true)
 
+deltavwap = (close - vwap) / vwap
+// deltavwap_pp = deltavwap * 100
+// if deltavwap_pp <= -3 or 3 <= deltavwap_pp
+//     debugLabelDn(str.format("{0,number,#.#}", deltavwap*100))
+// else if -0.2 <= deltavwap_pp and deltavwap_pp <= 0.2
+//     debugLabelDn(str.format("{0,number,#.#}", deltavwap*100))
 
 // ALERTS
 
@@ -116,6 +133,8 @@ strVolume(v) =>
     //str.format("{0,number,integer}M", vm)
     //vm > 1000 ? str.format("{0}B", vb) : str.format("{0}M", vb)
     str.format("{0}M", vb)
+strPercent(v) =>
+    str.format("{0,number,#.#}%", v*100)
 strUpDn(v) => v > 0 ? "Up" : v < 0 ? "Dn" : "Flat"
 
 
@@ -127,18 +146,17 @@ notrig(v) => not triggrered.contains(v)
 trig(v) => triggrered.put(v,true)
 
 if isvalueP100 and notrig("huge")
-    alert(str.format( "{0} 3min Huge Volume {1} : {2}->{3} {4} {5}", syminfo.ticker, strVolume(value), strPrice(close[1]), strPrice(close), strUpDn(close-close[1]), istrig("big")?" SAME":"" ), alert.freq_all)
+    alert(str.format( "{0} 3min Huge Volume {1} : {2}->{3} {4} {5} {6}", syminfo.ticker, strVolume(value), strPrice(close[1]), strPrice(close), strPercent(deltavwap), strUpDn(close-close[1]), istrig("big")?" SAME":"" ), alert.freq_all)
     trig("huge")
 if isvalueP99 and notrig("big")
-    alert(str.format( "{0} 3min Big Volume {1} : {2}->{3} {4}", syminfo.ticker, strVolume(value), strPrice(close[1]), strPrice(close), strUpDn(close-close[1]) ), alert.freq_all)
+    alert(str.format( "{0} 3min Big Volume {1} : {2}->{3} {4} {5}", syminfo.ticker, strVolume(value), strPrice(close[1]), strPrice(close), strPercent(deltavwap), strUpDn(close-close[1]) ), alert.freq_all)
     trig("big")
-if isvcumP99 and notrig("cum")
+if isvcumP99 and isvalueP50 and notrig("cum") and notrig("big") and notrig("huge")
     if isvcumP99[1]
-        if value[0] > value[1] / 2
-            alert(str.format( "{0} Cumulative Volume {1} : {2}->{3} {4} {5}", syminfo.ticker, strVolume(value), strPrice(close[1]), strPrice(close), strUpDn(close-close[1]), istrig("big") or istrig("huge")?" SAME":"" ), alert.freq_all)
-            trig("cum")
+        alert(str.format( "{0} Cumulative Volume {1} : {2}->{3} {4} {5} {6}", syminfo.ticker, strVolume(value), strPrice(close[1]), strPrice(close), strPercent(deltavwap), strUpDn(close-close[1]), "CONTINUE" ), alert.freq_all)
+        trig("cum")
     else //new
-        alert(str.format( "{0} Cumulative Volume {1} : {2}->{3} {4} {5}", syminfo.ticker, strVolume(value), strPrice(close[1]), strPrice(close), strUpDn(close-close[1]), istrig("big") or istrig("huge")?" SAME":"" ), alert.freq_all)
+        alert(str.format( "{0} Cumulative Volume {1} : {2}->{3} {4} {5} {6}", syminfo.ticker, strVolume(value), strPrice(close[1]), strPrice(close), strPercent(deltavwap), strUpDn(close-close[1]), "FIRST" ), alert.freq_all)
         trig("cum")
 
 
