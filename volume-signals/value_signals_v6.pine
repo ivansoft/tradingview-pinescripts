@@ -44,14 +44,20 @@ var displayOverlayMode = display.pane
 
 // IRUS realtime bar Volume is 0
 value = volume == 0.0 ? na : volume*hl2
+vvalue = request.security(syminfo.tickerid, "3", value, lookahead = barmerge.lookahead_on)
 
-p99 = ta.percentile_nearest_rank(value, inputBarsPercentile, 99)
-p100 = ta.percentile_nearest_rank(value, inputBarsPercentile, 100)
-p50 = ta.percentile_nearest_rank(value, inputBarsPercentile, inputPercentile50)
+// p99 = ta.percentile_nearest_rank(value, inputBarsPercentile, 99)
+// p100 = ta.percentile_nearest_rank(value, inputBarsPercentile, 100)
+// p50 = ta.percentile_nearest_rank(value, inputBarsPercentile, inputPercentile50)
+[p99,p100,p50] = request.security(syminfo.tickerid, "3", [
+     ta.percentile_nearest_rank(value, inputBarsPercentile, 99),
+     ta.percentile_nearest_rank(value, inputBarsPercentile, 100),
+     ta.percentile_nearest_rank(value, inputBarsPercentile, inputPercentile50)
+     ], lookahead = barmerge.lookahead_on)
 
-isvalueP100 = value >= p100
-isvalueP99 = value >= p99
-isvalueP50 = value >= p50
+isvalueP100 = vvalue >= p100
+isvalueP99 = vvalue >= p99
+isvalueP50 = vvalue >= p50
 
 colorplotvalue = switch
     isvalueP100 => color.new(color.purple, 50)
@@ -64,7 +70,10 @@ plot(isPlotP99 ? p99 : na, color=color.new(color.blue, 25), style=plot.style_lin
 plot(isPlotP100 ? p100 : na, color=color.new(color.purple, 25), style=plot.style_line, title="p100v", display = displayMode, editable = false)
 plot(isPlotP50 ? p50 : na, color=color.new(color.gray, 25), style=plot.style_line, title="p95v", display = displayMode, editable = false)
 
-vcum = math.sum(value, inputBarsCumulative)
+//vcum = math.sum(value, inputBarsCumulative)
+vcum = request.security(syminfo.tickerid, "3",
+     math.sum(value, inputBarsCumulative),
+     lookahead = barmerge.lookahead_on)
 // vcumsma = vcum //ta.sma(vcum, 3)
 // valuesma = value //ta.sma(value, 3)
 // plot(vcumsma)
@@ -79,7 +88,7 @@ valuerising = true //not ta.falling(valuesma, 1)
 p99cum = request.security(syminfo.tickerid, inputPeriodCumulativeH, ta.percentile_nearest_rank(
      math.sum(value, inputBarsCumulativeH),
      inputBarsPercentile, inputPercentileCumulative
-     ))
+     ), lookahead = barmerge.lookahead_on)
 
 isvcumP99 = vcum >= p99cum //and vcumrising and valuerising
 
@@ -99,14 +108,21 @@ bgcolor(inputShowColoredBackground ? bgcolor : na, editable = false)
 bgcolor(inputShowColoredBackground ? bgcolor : na, editable = false, force_overlay = true)
 
 
-// INFO
-
 oc2 = (open + close) / 2
 
+//anchor = timeframe.change("1D")
 vwap = ta.vwap(oc2, timeframe.change(inputVwapAnchor))
+// [vwap, upper, lower] = ta.vwap(oc2, timeframe.change("D"), inputVwapStdDevMult) // anchor "1D" is default
+// plot(isPlotVwap ? vwap : na, display = displayOverlayMode, editable = false, force_overlay = true)
+// plot(isPlotStd ? upper : na, color = color.gray, display = displayOverlayMode, editable = false, force_overlay = true)
+// plot(isPlotStd ? lower : na, color = color.gray, display = displayOverlayMode, editable = false, force_overlay = true)
 
 deltavwap = (close - vwap) / vwap
-
+// deltavwap_pp = deltavwap * 100
+// if deltavwap_pp <= -3 or 3 <= deltavwap_pp
+//     debugLabelDn(str.format("{0,number,#.#}", deltavwap*100))
+// else if -0.2 <= deltavwap_pp and deltavwap_pp <= 0.2
+//     debugLabelDn(str.format("{0,number,#.#}", deltavwap*100))
 
 // ALERTS
 
