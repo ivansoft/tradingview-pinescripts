@@ -1,11 +1,13 @@
 //@version=6
 indicator("Volume Value", "value", format = format.volume, overlay = false)
 
-var int inputBarsPercentile = input.int(2000, "Bars Percientile", inline = "00")  // (2000/272 =~ 7 days)
+var int inputBarsPercentile = input.int(2000, "Bars Percientile", inline = "00")  // (2000/272 =~ 7 days, 5000/272 =~ 18)
+var string inputVwapAnchor = input.string("D", "VWAP", inline = "00")
 var int inputBarsCumulative = input.int(5, "Bars Cumulative", inline = "01")     // (10)
 var float inputPercentileCumulative = input.float(99, "%", inline = "01")
 var string inputPeriodCumulativeH = input.string("15", "HTF Cum% Period", inline = "02")  // ("30")
 var int inputBarsCumulativeH = input.int(1, "Bars", inline = "02")
+var float inputPercentile50 = input.float(97, "Ignore Level P50", inline = "03")
 var bool inputDefaultAllInvert = input.bool(false, "Invert On/Off All Inputs", group = "Show/Hide")
 var bool _inputShowValueLevels = input.bool(true, "Levels", group = "Show/Hide", inline = "0")
 var bool _inputShowValueLevelP99 = input.bool(true, "P99", group = "Show/Hide", inline = "0")
@@ -14,10 +16,6 @@ var bool _inputShowValueLevelP50 = input.bool(true, "P50", group = "Show/Hide", 
 var bool _inputShowCumulative = input.bool(true, "Cumulative", group = "Show/Hide", inline = "1")
 var bool _inputShowCumulativeVolume = input.bool(true, "Volume", group = "Show/Hide", inline = "1")
 var bool _inputShowCumulativeLevelP99 = input.bool(true, "P99", group = "Show/Hide", inline = "1")
-var bool _inputShowVwap = input.bool(true, "VWAP", group = "Show/Hide", inline = "2")
-var bool _inputShowVwapMain = input.bool(true, "Main", group = "Show/Hide", inline = "2")
-var bool _inputShowVwapStdDev = input.bool(true, "StdDev", group = "Show/Hide", inline = "2")
-var float inputVwapStdDevMult = input.float(2.0, title='Mult', display = display.none, group = "Show/Hide", inline = "2")
 var bool _inputShowColoredBackground = input.bool(true, "Background Highlights", group = "Show/Hide")
 
 var bool inputShowValueLevels = inputDefaultAllInvert ? not _inputShowValueLevels : _inputShowValueLevels
@@ -27,9 +25,6 @@ var bool inputShowValueLevelP50 = inputDefaultAllInvert ? not _inputShowValueLev
 var bool inputShowCumulative = inputDefaultAllInvert ? not _inputShowCumulative : _inputShowCumulative
 var bool inputShowCumulativeVolume = inputDefaultAllInvert ? not _inputShowCumulativeVolume : _inputShowCumulativeVolume
 var bool inputShowCumulativeLevelP99 = inputDefaultAllInvert ? not _inputShowCumulativeLevelP99 : _inputShowCumulativeLevelP99
-var bool inputShowVwap = inputDefaultAllInvert ? not _inputShowVwap : _inputShowVwap
-var bool inputShowVwapMain = inputDefaultAllInvert ? not _inputShowVwapMain : _inputShowVwapMain
-var bool inputShowVwapStdDev = inputDefaultAllInvert ? not _inputShowVwapStdDev : _inputShowVwapStdDev
 var bool inputShowColoredBackground = inputDefaultAllInvert ? not _inputShowColoredBackground : _inputShowColoredBackground
 
 var bool isPlotP99 = inputShowValueLevels and inputShowValueLevelP99
@@ -37,8 +32,6 @@ var bool isPlotP100 = inputShowValueLevels and inputShowValueLevelP100
 var bool isPlotP50 = inputShowValueLevels and inputShowValueLevelP50
 var bool isPlotCumV = inputShowCumulative and inputShowCumulativeVolume
 var bool isPlotCumP99 = inputShowCumulative and inputShowCumulativeLevelP99
-var bool isPlotVwap = inputShowVwap and inputShowVwapMain
-var bool isPlotStd = inputShowVwap and inputShowVwapStdDev
 
 debugLabelUp(txt,overlay=true) =>
     label.new(bar_index, high, txt, yloc = yloc.abovebar, style = label.style_arrowdown, force_overlay = overlay, textcolor = color.black)
@@ -54,7 +47,7 @@ value = volume == 0.0 ? na : volume*hl2
 
 p99 = ta.percentile_nearest_rank(value, inputBarsPercentile, 99)
 p100 = ta.percentile_nearest_rank(value, inputBarsPercentile, 100)
-p50 = ta.percentile_nearest_rank(value, inputBarsPercentile, 97)
+p50 = ta.percentile_nearest_rank(value, inputBarsPercentile, inputPercentile50)
 
 isvalueP100 = value >= p100
 isvalueP99 = value >= p99
@@ -106,36 +99,28 @@ bgcolor(inputShowColoredBackground ? bgcolor : na, editable = false)
 bgcolor(inputShowColoredBackground ? bgcolor : na, editable = false, force_overlay = true)
 
 
+// INFO
+
 oc2 = (open + close) / 2
 
-//anchor = timeframe.change("1D")
-[vwap, upper, lower] = ta.vwap(oc2, timeframe.change("D"), inputVwapStdDevMult) // anchor "1D" is default
-plot(isPlotVwap ? vwap : na, display = displayOverlayMode, editable = false, force_overlay = true)
-plot(isPlotStd ? upper : na, color = color.gray, display = displayOverlayMode, editable = false, force_overlay = true)
-plot(isPlotStd ? lower : na, color = color.gray, display = displayOverlayMode, editable = false, force_overlay = true)
+vwap = ta.vwap(oc2, timeframe.change(inputVwapAnchor))
 
 deltavwap = (close - vwap) / vwap
-// deltavwap_pp = deltavwap * 100
-// if deltavwap_pp <= -3 or 3 <= deltavwap_pp
-//     debugLabelDn(str.format("{0,number,#.#}", deltavwap*100))
-// else if -0.2 <= deltavwap_pp and deltavwap_pp <= 0.2
-//     debugLabelDn(str.format("{0,number,#.#}", deltavwap*100))
+
 
 // ALERTS
 
-strPrice(v) =>
+strPrice(float v) =>
     var _strPriceScale = str.repeat("#",math.ceil(math.log10(syminfo.pricescale)))
     str.format("{0,number,"+"#."+_strPriceScale+"}",v)
-strVolume(v) =>
-    vm = v /    1000000
-    vb = v / 1000000000
-    //vm < 1000 ? str.format("{0,number,integer}M", vm) : str.format("{0,number,integer}B", vb)
-    //str.format("{0,number,integer}M", vm)
-    //vm > 1000 ? str.format("{0}B", vb) : str.format("{0}M", vb)
-    str.format("{0}M", vb)
-strPercent(v) =>
+strVolume(float v, string big="M") =>
+    format = switch big
+        "M" => str.format("{0,number,integer}M", v /    1000000)
+        "B" => str.format("{0,number,integer}B", v / 1000000000)
+    format
+strPercent(float v) =>
     str.format("{0,number,#.#}%", v*100)
-strUpDn(v) => v > 0 ? "Up" : v < 0 ? "Dn" : "Flat"
+strUpDn(float v) => v > 0 ? "Up" : v < 0 ? "Dn" : "Flat"
 
 
 varip triggrered = map.new<string,bool>()
@@ -146,17 +131,17 @@ notrig(v) => not triggrered.contains(v)
 trig(v) => triggrered.put(v,true)
 
 if isvalueP100 and notrig("huge")
-    alert(str.format( "{0} 3min Huge Volume {1} : {2}->{3} {4} {5} {6}", syminfo.ticker, strVolume(value), strPrice(close[1]), strPrice(close), strPercent(deltavwap), strUpDn(close-close[1]), istrig("big")?" SAME":"" ), alert.freq_all)
+    alert(str.format( "{0} 3min Huge Volume {1} : {2}->{3} {4} {5} {6}", syminfo.ticker, strVolume(value,"M"), strPrice(close[1]), strPrice(close), strPercent(deltavwap), strUpDn(close-close[1]), istrig("big")?" SAME":"" ), alert.freq_all)
     trig("huge")
 if isvalueP99 and notrig("big")
-    alert(str.format( "{0} 3min Big Volume {1} : {2}->{3} {4} {5}", syminfo.ticker, strVolume(value), strPrice(close[1]), strPrice(close), strPercent(deltavwap), strUpDn(close-close[1]) ), alert.freq_all)
+    alert(str.format( "{0} 3min Big Volume {1} : {2}->{3} {4} {5}", syminfo.ticker, strVolume(value,"M"), strPrice(close[1]), strPrice(close), strPercent(deltavwap), strUpDn(close-close[1]) ), alert.freq_all)
     trig("big")
-if isvcumP99 and isvalueP50 and notrig("cum") and notrig("big") and notrig("huge")
+if isvcumP99 and isvalueP50 and notrig("cum")
     if isvcumP99[1]
-        alert(str.format( "{0} Cumulative Volume {1} : {2}->{3} {4} {5} {6}", syminfo.ticker, strVolume(value), strPrice(close[1]), strPrice(close), strPercent(deltavwap), strUpDn(close-close[1]), "CONTINUE" ), alert.freq_all)
+        alert(str.format( "{0} Cumulative Volume {1} : {2}->{3} {4} {5} {6}", syminfo.ticker, strVolume(vcum,"B"), strPrice(close[1]), strPrice(close), strPercent(deltavwap), strUpDn(close-close[1]), "CONTINUE" ), alert.freq_all)
         trig("cum")
     else //new
-        alert(str.format( "{0} Cumulative Volume {1} : {2}->{3} {4} {5} {6}", syminfo.ticker, strVolume(value), strPrice(close[1]), strPrice(close), strPercent(deltavwap), strUpDn(close-close[1]), "FIRST" ), alert.freq_all)
+        alert(str.format( "{0} Cumulative Volume {1} : {2}->{3} {4} {5} {6}", syminfo.ticker, strVolume(vcum,"B"), strPrice(close[1]), strPrice(close), strPercent(deltavwap), strUpDn(close-close[1]), "FIRST" ), alert.freq_all)
         trig("cum")
 
 
