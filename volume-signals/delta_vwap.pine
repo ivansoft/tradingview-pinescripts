@@ -1,0 +1,37 @@
+//@version=6
+indicator("VWAP", "vwap_delta", format = format.percent)
+
+var int inputBarsPercentile = input.int(2000, "Bars Percientile", inline = "00")
+var string inputVwapAnchor = input.string("D", "Vwap Anchor Period", inline = "02")
+
+var displayMode = display.data_window + display.pane
+var displayOverlayMode = display.pane
+
+
+oc2 = (open + close) / 2
+
+vwap = ta.vwap(oc2, timeframe.change(inputVwapAnchor))
+
+plot(vwap, display = displayOverlayMode, force_overlay = true)
+
+//deltavwap = (close - vwap) / vwap
+deltavwap = (high - vwap >= 0 ? (high - vwap) / vwap : (low - vwap) / vwap) * 100
+
+plot(deltavwap)
+
+p99 = ta.percentile_nearest_rank(deltavwap, inputBarsPercentile, 99)
+p100 = ta.percentile_nearest_rank(deltavwap, inputBarsPercentile, 100)
+p99n = -ta.percentile_nearest_rank(-deltavwap, inputBarsPercentile, 99)
+p100n = -ta.percentile_nearest_rank(-deltavwap, inputBarsPercentile, 100)
+
+plot(p99, color=color.new(color.blue, 25), style=plot.style_line, title="p99", display = displayMode, editable = false)
+plot(p100, color=color.new(color.purple, 25), style=plot.style_line, title="p100", display = displayMode, editable = false)
+plot(p99n, color=color.new(color.blue, 25), style=plot.style_line, title="p99", display = displayMode, editable = false)
+plot(p100n, color=color.new(color.purple, 25), style=plot.style_line, title="p100", display = displayMode, editable = false)
+
+bgcolordelta = switch
+    deltavwap <= p100n or p100 <= deltavwap => color.new(color.purple, 85)
+    deltavwap <= p99n or p99 <= deltavwap => color.new(color.blue, 85)
+    => na
+bgcolor(bgcolordelta, editable = false)
+bgcolor(bgcolordelta, editable = false, force_overlay = true)
