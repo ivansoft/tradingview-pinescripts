@@ -78,6 +78,6 @@ plotchar(pressure_up, char = "^", location = location.belowbar, color = color.ne
 
 
 if pressure_down
-    alert(str.format("LQDT Pressure DOWN : {0}->{1}", strPrice(plow[1]), strPrice(plow)), alert.freq_all)
+    alert(str.format("LQDT Pressure DOWN : {0}->{1}", strPrice(plow[1]), strPrice(plow)), alert.freq_once_per_bar)
 if pressure_up
-    alert(str.format("LQDT Pressure UP : {0}->{1}", strPrice(plow[1]), strPrice(plow)), alert.freq_all)
+    alert(str.format("LQDT Pressure UP : {0}->{1}", strPrice(plow[1]), strPrice(plow)), alert.freq_once_per_bar)
