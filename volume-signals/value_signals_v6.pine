@@ -147,18 +147,24 @@ istrig(v) => triggrered.contains(v)
 notrig(v) => not triggrered.contains(v)
 trig(v) => triggrered.put(v,true)
 
+varip float tickprice = na
+var tickdebug = debugLabelDn("")
+
+label.set_text(tickdebug, str.format("{0}",tickprice))
+label.set_point(tickdebug, chart.point.now(low))
+
 if isvalueP100 and notrig("huge")
-    alert(str.format( "{0} 3min Huge Volume {1} : {2}->{3} {4} {5} {6}", syminfo.ticker, strVolume(value,"M"), strPrice(close[1]), strPrice(close), strPercent(deltavwap), strUpDn(close-close[1]), istrig("big")?" SAME":"" ), alert.freq_all)
+    alert(str.format( "{0} 3min Huge Volume {1} : {2}->{3} {4} Tick {5} {6}", syminfo.ticker, strVolume(value,"M"), strPrice(close[1]), strPrice(close), strPercent(deltavwap), strUpDn(close-tickprice), istrig("big")?" SAME":"" ), alert.freq_all)
     trig("huge")
 if isvalueP99 and notrig("big")
-    alert(str.format( "{0} 3min Big Volume {1} : {2}->{3} {4} {5}", syminfo.ticker, strVolume(value,"M"), strPrice(close[1]), strPrice(close), strPercent(deltavwap), strUpDn(close-close[1]) ), alert.freq_all)
+    alert(str.format( "{0} 3min Big Volume {1} : {2}->{3} {4} Tick {5}", syminfo.ticker, strVolume(value,"M"), strPrice(close[1]), strPrice(close), strPercent(deltavwap), strUpDn(close-tickprice) ), alert.freq_all)
     trig("big")
 if isvcumP99 and isvalueP50 and notrig("cum")
     if isvcumP99[1]
-        alert(str.format( "{0} Cumulative Volume {1} : {2}->{3} {4} {5} {6}", syminfo.ticker, strVolume(vcum,"B"), strPrice(close[1]), strPrice(close), strPercent(deltavwap), strUpDn(close-close[1]), "CONTINUE" ), alert.freq_all)
+        alert(str.format( "{0} Cumulative Volume {1} : {2}->{3} {4} Tick {5} {6}", syminfo.ticker, strVolume(vcum,"B"), strPrice(close[1]), strPrice(close), strPercent(deltavwap), strUpDn(close-tickprice), "CONTINUE" ), alert.freq_all)
         trig("cum")
     else //new
-        alert(str.format( "{0} Cumulative Volume {1} : {2}->{3} {4} {5} {6}", syminfo.ticker, strVolume(vcum,"B"), strPrice(close[1]), strPrice(close), strPercent(deltavwap), strUpDn(close-close[1]), "FIRST" ), alert.freq_all)
+        alert(str.format( "{0} Cumulative Volume {1} : {2}->{3} {4} Tick {5} {6}", syminfo.ticker, strVolume(vcum,"B"), strPrice(close[1]), strPrice(close), strPercent(deltavwap), strUpDn(close-tickprice), "FIRST" ), alert.freq_all)
         trig("cum")
 
-
+tickprice := close
