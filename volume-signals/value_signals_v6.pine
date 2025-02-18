@@ -96,16 +96,16 @@ plot(isPlotCumV ? vcum : na, color=color.new(color.olive, 50), style=plot.style_
 plot(isPlotCumP99 ? p99cum : na, color=color.new(color.gray, 25), style=plot.style_line, title="p99cum", display = displayMode, editable = false)
 
 
-const color NO_COLOR = color(na)
-bgcolor = switch
+bgcolorall = switch
+    not inputShowColoredBackground => na
     isvalueP100 => color.new(color.purple, 85)
     isvalueP99 => color.new(color.blue, 85)
     isvcumP99 => color.new(color.olive, 85)
     //vcum >= p100 => color.new(color.gray, 85)
     //vcum >= p99 => color.new(color.gray, 95)
-    => NO_COLOR
-bgcolor(inputShowColoredBackground ? bgcolor : na, editable = false)
-bgcolor(inputShowColoredBackground ? bgcolor : na, editable = false, force_overlay = true)
+    => na
+bgcolor(bgcolorall, editable = false)
+bgcolor(bgcolorall, editable = false, force_overlay = true)
 
 
 oc2 = (open + close) / 2
@@ -123,6 +123,7 @@ deltavwap = (close - vwap) / vwap
 //     debugLabelDn(str.format("{0,number,#.#}", deltavwap*100))
 // else if -0.2 <= deltavwap_pp and deltavwap_pp <= 0.2
 //     debugLabelDn(str.format("{0,number,#.#}", deltavwap*100))
+
 
 // ALERTS
 
