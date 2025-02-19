@@ -1,0 +1,67 @@
+//@version=6
+indicator("Price Spike Detector", "wick_spike", format = format.price, overlay = false)
+
+int inputBarsP99 = input.int(1500, "percentile bars")
+
+wickhigh = high - math.max(open, close)
+wicklow = low - math.min(open, close)
+
+[wickhigh_h15, wicklow_h15] = request.security(syminfo.tickerid, "15", [wickhigh, wicklow], lookahead = barmerge.lookahead_on)
+// [wickhigh_h30, wicklow_h30] = request.security(syminfo.tickerid, "30", [wickhigh, wicklow], lookahead = barmerge.lookahead_on)
+[wickhigh_h60, wicklow_h60] = request.security(syminfo.tickerid, "60", [wickhigh, wicklow], lookahead = barmerge.lookahead_on)
+// [wickhigh_h100, wicklow_h100] = request.security(syminfo.tickerid, "100", [wickhigh, wicklow], lookahead = barmerge.lookahead_on)
+// [wickhigh_h120, wicklow_h120] = request.security(syminfo.tickerid, "120", [wickhigh, wicklow], lookahead = barmerge.lookahead_on)
+// [wickhigh_h180, wicklow_h180] = request.security(syminfo.tickerid, "180", [wickhigh, wicklow], lookahead = barmerge.lookahead_on)
+// [wickhigh_h240, wicklow_h240] = request.security(syminfo.tickerid, "240", [wickhigh, wicklow], lookahead = barmerge.lookahead_on)
+// [wickhigh_h480, wicklow_h480] = request.security(syminfo.tickerid, "480", [wickhigh, wicklow], lookahead = barmerge.lookahead_on)
+// [wickhigh_hd, wicklow_hd] = request.security(syminfo.tickerid, "D", [wickhigh, wicklow], lookahead = barmerge.lookahead_on)
+
+p99h = ta.percentile_nearest_rank(wickhigh, inputBarsP99, 99)
+p99l = ta.percentile_nearest_rank(-wicklow, inputBarsP99, 99)
+p100h = ta.percentile_nearest_rank(wickhigh, inputBarsP99, 100)
+p100l = ta.percentile_nearest_rank(-wicklow, inputBarsP99, 100)
+
+colorwick = switch
+    wicklow <= -p100l or p100h <= wickhigh => color.new(color.purple,50)
+    wicklow <= -p99l or p99h <= wickhigh => color.new(color.blue,50)
+    => color.new(color.gray,50)
+
+// plot(wickhigh_hd, "whd", style = plot.style_columns, color = color.new(color.gray,90))
+// plot(wicklow_hd, "wld", style = plot.style_columns, color = color.new(color.gray,90))
+// plot(wickhigh_h480, "wh480", style = plot.style_columns, color = color.new(color.gray,90))
+// plot(wicklow_h480, "wl480", style = plot.style_columns, color = color.new(color.gray,90))
+// plot(wickhigh_h240, "wh240", style = plot.style_columns, color = color.new(color.gray,90))
+// plot(wicklow_h240, "wl240", style = plot.style_columns, color = color.new(color.gray,90))
+// plot(wickhigh_h180, "wh180", style = plot.style_columns, color = color.new(color.gray,90))
+// plot(wicklow_h180, "wl180", style = plot.style_columns, color = color.new(color.gray,90))
+// plot(wickhigh_h120, "wh120", style = plot.style_columns, color = color.new(color.gray,90))
+// plot(wicklow_h120, "wl120", style = plot.style_columns, color = color.new(color.gray,90))
+// plot(wickhigh_h100, "wh100", style = plot.style_columns, color = color.new(color.gray,90))
+// plot(wicklow_h100, "wl100", style = plot.style_columns, color = color.new(color.gray,90))
+plot(wickhigh_h60, "wh60", style = plot.style_columns, color = color.new(color.gray,90))
+plot(wicklow_h60, "wl60", style = plot.style_columns, color = color.new(color.gray,90))
+// plot(wickhigh_h30, "wh30", style = plot.style_columns, color = color.new(color.gray,90))
+// plot(wicklow_h30, "wl30", style = plot.style_columns, color = color.new(color.gray,90))
+plot(wickhigh_h15, "wh15", style = plot.style_columns, color = color.new(color.gray,90))
+plot(wicklow_h15, "wl15", style = plot.style_columns, color = color.new(color.gray,90))
+
+plot(wickhigh, "wh", style = plot.style_columns, color = colorwick)
+plot(wicklow, "wl", style = plot.style_columns, color = colorwick)
+
+
+
+plot(p99h, "p99h", color = color.new(color.blue,50))
+plot(-p99l, "p99l", color = color.new(color.blue,50))
+// plot(p100h, "p100h", color = color.new(color.purple,50))
+// plot(-p100l, "p100l", color = color.new(color.purple,50))
+
+
+bgcolorwick = switch
+    p100h <= wickhigh => color.new(color.green,85)
+    wicklow <= -p100l => color.new(color.red,85)
+    p99h <= wickhigh => color.new(color.green,95)
+    wicklow <= -p99l => color.new(color.red,95)
+    => na
+
+bgcolor(bgcolorwick, force_overlay = true)
+
