@@ -124,6 +124,17 @@ deltavwap = (close - vwap) / vwap
 // else if -0.2 <= deltavwap_pp and deltavwap_pp <= 0.2
 //     debugLabelDn(str.format("{0,number,#.#}", deltavwap*100))
 
+calcdayopen() =>
+    //var float dayopenprice = na
+    //dayopen = request.security(syminfo.tickerid, "D", open, lookahead = barmerge.lookahead_on)  -- wrong way - dayopen[1] != prevday
+    bars = ta.barssince(ta.change(dayofmonth) != 0)
+    open[bars]
+dayopen = calcdayopen()
+deltaopen = (close - dayopen) / dayopen
+
+// if bar_index % 30 == 0
+//     debugLabelDn(str.format("{0,number,#.#}\n{1,number,#.#}", deltavwap*100, deltaopen*100))
+
 
 // ALERTS
 
@@ -148,23 +159,23 @@ notrig(v) => not triggrered.contains(v)
 trig(v) => triggrered.put(v,true)
 
 varip float tickprice = na
+// debug
 var tickdebug = debugLabelDn("")
-
 label.set_text(tickdebug, str.format("{0}",tickprice))
 label.set_point(tickdebug, chart.point.now(low))
 
 if isvalueP100 and notrig("huge")
-    alert(str.format( "{0} 3min Huge Volume {1} : {2}->{3} {4} Tick {5} {6}", syminfo.ticker, strVolume(value,"M"), strPrice(close[1]), strPrice(close), strPercent(deltavwap), strUpDn(close-tickprice), istrig("big")?" SAME":"" ), alert.freq_all)
+    alert(str.format( "{0} 3min Huge Volume {1} : {2}->{3} D {4} VWAP {5} Tick {6} {7}", syminfo.ticker, strVolume(value,"B"), strPrice(close[1]), strPrice(close), strPercent(deltaopen), strPercent(deltavwap), strUpDn(close-tickprice), istrig("big")?" SAME":"" ), alert.freq_all)
     trig("huge")
 if isvalueP99 and notrig("big")
-    alert(str.format( "{0} 3min Big Volume {1} : {2}->{3} {4} Tick {5}", syminfo.ticker, strVolume(value,"M"), strPrice(close[1]), strPrice(close), strPercent(deltavwap), strUpDn(close-tickprice) ), alert.freq_all)
+    alert(str.format( "{0} 3min Big Volume {1} : {2}->{3} D {4} VWAP {5} Tick {6}", syminfo.ticker, strVolume(value,"B"), strPrice(close[1]), strPrice(close), strPercent(deltaopen), strPercent(deltavwap), strUpDn(close-tickprice) ), alert.freq_all)
     trig("big")
 if isvcumP99 and isvalueP50 and notrig("cum")
     if isvcumP99[1]
-        alert(str.format( "{0} Cumulative Volume {1} : {2}->{3} {4} Tick {5} {6}", syminfo.ticker, strVolume(vcum,"B"), strPrice(close[1]), strPrice(close), strPercent(deltavwap), strUpDn(close-tickprice), "CONTINUE" ), alert.freq_all)
+        alert(str.format( "{0} Cumulative Volume {1} : {2}->{3} D {4} VWAP {5} Tick {6} {7}", syminfo.ticker, strVolume(vcum,"B"), strPrice(close[1]), strPrice(close), strPercent(deltaopen), strPercent(deltavwap), strUpDn(close-tickprice), "CONTINUE" ), alert.freq_all)
         trig("cum")
     else //new
-        alert(str.format( "{0} Cumulative Volume {1} : {2}->{3} {4} Tick {5} {6}", syminfo.ticker, strVolume(vcum,"B"), strPrice(close[1]), strPrice(close), strPercent(deltavwap), strUpDn(close-tickprice), "FIRST" ), alert.freq_all)
+        alert(str.format( "{0} Cumulative Volume {1} : {2}->{3} D {4} VWAP {5} Tick {6} {7}", syminfo.ticker, strVolume(vcum,"B"), strPrice(close[1]), strPrice(close), strPercent(deltaopen), strPercent(deltavwap), strUpDn(close-tickprice), "FIRST" ), alert.freq_all)
         trig("cum")
 
 tickprice := close
