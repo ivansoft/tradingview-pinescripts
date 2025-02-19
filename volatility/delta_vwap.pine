@@ -1,7 +1,7 @@
 //@version=6
 indicator("VWAP", "vwap_delta", format = format.percent)
 
-var int inputBarsPercentile = input.int(2000, "Bars Percientile", inline = "00")
+var int inputBarsPercentile = input.int(2000, "Bars Percentile", inline = "00")
 var string inputVwapAnchor = input.string("D", "Vwap Anchor Period", inline = "02")
 
 var displayMode = display.data_window + display.pane

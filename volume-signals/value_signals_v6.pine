@@ -1,7 +1,7 @@
 //@version=6
 indicator("Volume Value", "value", format = format.volume, overlay = false)
 
-var int inputBarsPercentile = input.int(2000, "Bars Percientile", inline = "00")  // (2000/272 =~ 7 days, 5000/272 =~ 18)
+var int inputBarsPercentile = input.int(2000, "Bars Percentile", inline = "00")  // (2000/272 =~ 7 days, 5000/272 =~ 18)
 var string inputVwapAnchor = input.string("D", "VWAP", inline = "00")
 var int inputBarsCumulative = input.int(5, "Bars Cumulative", inline = "01")     // (10)
 var float inputPercentileCumulative = input.float(99, "%", inline = "01")
