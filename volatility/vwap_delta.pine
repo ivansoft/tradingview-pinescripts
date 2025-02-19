@@ -5,6 +5,7 @@ bool inputShowVwap = input.bool(true, "VWAP", inline = "2")
 bool inputShowVwapMain = input.bool(true, "Main", inline = "2")
 bool inputShowVwapStdDev = input.bool(true, "StdDev", inline = "2")
 float inputVwapStdDevMult = input.float(2.0, title='Mult', display = display.none, inline = "2")
+var string inputVwapAnchor = input.string("D", "Period VWAP", inline = "3")
 
 var displayMode = display.data_window + display.pane
 var displayModeOverlay = display.pane
@@ -14,7 +15,7 @@ oc2 = (open + close) / 2
 
 
 //anchor = timeframe.change("1D")
-[vwap, upper, lower] = ta.vwap(oc2, timeframe.change("D"), inputVwapStdDevMult) // anchor "1D" is default
+[vwap, upper, lower] = ta.vwap(oc2, timeframe.change(inputVwapAnchor), inputVwapStdDevMult) // anchor "1D" is default
 
 plot(inputShowVwap and inputShowVwapMain ? vwap : na, display = displayModeOverlay, editable = false, force_overlay = true)
 plot(inputShowVwap and inputShowVwapStdDev ? upper : na, color = color.gray, display = displayModeOverlay, editable = false, force_overlay = true)
@@ -38,7 +39,7 @@ p99_delta_negative = ta.percentile_nearest_rank(negative_delta, 2000, 99.9)
 
 plot(p99_delta_positive, color = color.new(color.gray, 50), title = "+p99")
 plot(-p99_delta_negative, color = color.new(color.gray, 50), title = "-p99")
-plot(delta, "delta")
+plot(delta, "delta", display = display.pane)
 
 bgcolor_delta = switch
     positive_delta >= p99_delta_positive => color.new(color.green, 85)
