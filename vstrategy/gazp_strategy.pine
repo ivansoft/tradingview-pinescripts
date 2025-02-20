@@ -1,0 +1,93 @@
+// This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © ivansoft
+
+//@version=6
+strategy("GAZP Pivot Strategy", "gazp_strategy", overlay = true, max_labels_count = 500)
+
+debugLabelUp(txt,overlay=true,offset=0) =>
+    label.new(bar_index+offset, high, txt, yloc = yloc.abovebar, style = label.style_arrowdown, force_overlay = overlay, textcolor = color.black)
+debugLabelDn(txt,overlay=true,offset=0) =>
+    label.new(bar_index+offset, low, txt, yloc = yloc.belowbar, style = label.style_arrowup, force_overlay = overlay, textcolor = color.black)
+
+var displayMode = display.data_window + display.pane
+var displayOverlayMode = display.pane
+
+var allpvh = array.new<float>()
+var allpvl = array.new<float>()
+
+
+fractal = 100
+delim1 = 1.0
+delim10 = 5.0
+
+pvh = ta.pivothigh(fractal,fractal)
+pvl = ta.pivotlow(fractal,fractal)
+
+plotshape(pvh, "pvh", shape.triangledown, location.abovebar, color.new(color.gray,50), -fractal, size = size.tiny)
+plotshape(pvl, "pvl", shape.triangleup, location.belowbar, color.new(color.gray,50), -fractal, size = size.tiny)
+
+if not na(pvh)
+    debugLabelUp(str.format("{0}",pvh),offset=-fractal)
+if not na(pvl)
+    debugLabelDn(str.format("{0}",pvl),offset=-fractal)
+
+if not na(pvh)
+    allpvh.push(pvh-int(pvh))
+if not na(pvl)
+    allpvl.push(pvl-int(pvl))
+
+pvh_bars = ta.barssince(not na(pvh))+fractal
+pvl_bars = ta.barssince(not na(pvl))+fractal
+
+if barstate.islastconfirmedhistory
+    // debugLabelUp(str.format( "h {2}\nl {1}\nm {0}",allpvh.median(),allpvh.min(),allpvh.max() ))
+    // debugLabelDn(str.format( "m {0}\nl {1}\nh {2}",allpvl.median(),allpvl.min(),allpvl.max() ))
+    debugLabelDn(str.format("{0}\n{1}",pvh_bars,pvl_bars))
+
+
+
+th = ta.highest(fractal)
+tl = ta.lowest(fractal)
+// th_bars = ta.highestbars(fractal)
+// tl_bars = ta.lowestbars(fractal)
+
+// var float highest = 0
+// var float lowest = 99999999999
+// if th > highest
+//     highest := th
+// if tl < lowest 
+//     lowest := tl
+
+plot(th, style = plot.style_steplinebr, color = color.new(color.gray,50))
+plot(tl, style = plot.style_steplinebr, color = color.new(color.gray,50))
+
+bullish = close > open
+bearish = close < open
+
+// highint1 = switch
+//     bullish => delim1 * math.ceil(high / delim1)
+//     bearish => delim1 * math.ceil(high / delim1)
+//     => delim1 * math.round(high / delim1)
+highint1 = delim1 * math.round(high / delim1)
+lowint1 = delim1 * math.round(low / delim1)
+// highint10 = delim10 * math.round(high / delim10)
+// lowint10 = delim10 * math.round(low / delim10)
+
+
+
+
+// plot(highint10, color = color.new(color.blue,50), style = plot.style_steplinebr)
+ph1 = plot(highint1, color = color.new(color.green,50), style = plot.style_steplinebr, linewidth = 2, display = displayOverlayMode)
+// plot(lowint10, color = color.new(color.blue,50), style = plot.style_steplinebr)
+pl1 = plot(lowint1, color = color.new(color.red,50), style = plot.style_steplinebr, linewidth = 2, display = displayOverlayMode)
+
+fillcolor = switch
+    bullish => color.new(color.green,90)
+    bearish => color.new(color.red,90)
+    => color.new(color.gray,50)
+fill(ph1, pl1, color = fillcolor)
+
+
+
+
+
