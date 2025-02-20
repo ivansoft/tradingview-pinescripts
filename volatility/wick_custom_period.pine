@@ -1,0 +1,84 @@
+//@version=6
+indicator("Custom Hours Bars", "custom_hours", max_labels_count = 500)
+
+debugLabelUp(txt,overlay=true) =>
+    label.new(bar_index, high, txt, yloc = yloc.abovebar, style = label.style_arrowdown, force_overlay = overlay, textcolor = color.black)
+debugLabelDn(txt,overlay=true) =>
+    label.new(bar_index, low, txt, yloc = yloc.belowbar, style = label.style_arrowup, force_overlay = overlay, textcolor = color.black)
+
+
+var const array<string> periods2h = array.from(
+         "0700-0950", "0950-1200", "1200-1400", "1400-1600", "1600-1840", "1900-2100", "2100-2350"
+     )
+
+// type BarInfo
+//     float open
+//     float close
+//     float high
+//     float low
+
+sessionBegins(sess) =>
+    t = time("", sess)
+    timeframe.isintraday and (not barstate.isfirst) and na(t[1]) and not na(t)
+sessionEnds(sess) =>
+    t = time("", sess)
+    timeframe.isintraday and (not barstate.isfirst) and not na(t[1]) and na(t)
+
+daychange = ta.change(dayofmonth) != 0
+
+
+var int debug = na
+
+var chart.point start = na
+var int index = na
+var int index_next = 0
+
+var float wick_high = na
+var float wick_low = na
+var int bgindex_start = na
+var int bgindex_end = na
+var float highest = na
+var float lowest = na
+
+if high > highest
+    highest := high
+if low < lowest
+    lowest := low
+
+if not na(index) and sessionEnds(periods2h.get(index))
+    len = bar_index - start.index
+    wick_high := highest - math.max(start.price, close)
+    wick_low := math.min(start.price, close) - lowest
+    bgindex_start := bar_index + (100 - (bar_index - start.index))
+    bgindex_end := bar_index + 100
+    //debugLabelDn(str.format("h:{0}\nl:{1}\n{2}",highest,lowest,len))
+
+if daychange
+    //debugLabelUp(str.format("{1}\n{0}",index, index_next))
+    for [idx, val] in periods2h
+        if sessionBegins(val)
+            index_next := idx
+
+if sessionBegins(periods2h.get(index_next))
+    start := chart.point.now(open)
+    index := index_next
+    index_next := (index_next + 1) % periods2h.size()
+    highest := high
+    lowest := low
+    //debugLabelDn(str.format("{0}\n{1}",index,index_next))
+    //debugLabelUp(str.format("{1}\n{0}",index, index_next))
+
+
+// plot(highest, color = color.new(color.green,25), style = plot.style_circles, force_overlay = true)
+// plot(lowest, color = color.new(color.red,25), style = plot.style_circles, force_overlay = true)
+
+
+// plotwick_high = bgindex_start <= bar_index and bar_index <= bgindex_end ? wick_high : na
+// plotwick_low = bgindex_start <= bar_index and bar_index <= bgindex_end ? -wick_low : na
+
+plot(wick_high, style = plot.style_columns, color = color.new(color.gray,75))
+plot(-wick_low, style = plot.style_columns, color = color.new(color.gray,75))
+
+// plot(plotwick_high, style = plot.style_columns, color = color.new(color.gray,75), offset = -100)
+// plot(plotwick_low, style = plot.style_columns, color = color.new(color.gray,75), offset = -100)
+
