@@ -50,13 +50,6 @@ tl = ta.lowest(fractal)
 // th_bars = ta.highestbars(fractal)
 // tl_bars = ta.lowestbars(fractal)
 
-var lbllast = label.new(bar_index, low, "", yloc = yloc.belowbar, style = label.style_arrowup, force_overlay = true, textcolor = color.black)
-if barstate.islast
-    label.set_text(lbllast, str.format("{0}",tl))
-    label.set_x(lbllast, bar_index)
-    // label.set_xloc(lbllast, time, xloc.bar_time)
-    //label.set_point(lbllast, chart.point.now(low))
-
 // var float highest = 0
 // var float lowest = 99999999999
 // if th > highest
@@ -74,32 +67,24 @@ bearish = close < open
 //     bullish => delim1 * math.ceil(high / delim1)
 //     bearish => delim1 * math.ceil(high / delim1)
 //     => delim1 * math.round(high / delim1)
-highint1 = delim1 * math.floor(high / delim1)
-lowint1 = delim1 * math.ceil(low / delim1)
+highint1 = delim1 * math.ceil(high / delim1)
+lowint1 = delim1 * math.floor(low / delim1)
 // highint10 = delim10 * math.round(high / delim10)
 // lowint10 = delim10 * math.round(low / delim10)
 
-// if highint1 < lowint1 and lowint1 <= high
-//     highint1 := lowint1
-// if lowint1 > highint1 and highint1 <= low
-//     lowint1 := highint1
-// if bearish and highint1 < highint1[1]
-//     highint1 := highint1[1]
-// if high < high[1] and highint1 < lowint1
-//     highint1 := lowint1
-// if low > low[1] and lowint1 > highint1
-//     lowint1 := highint1
-// if highint1 < low
-//     highint1 := lowint1
 // if lowint1 > high
-//     lowint1 := highint1
-// if lowint1 > high and highint1 < low
 //     lowint1 := lowint1[1]
+// if highint1 < low
 //     highint1 := highint1[1]
-if lowint1 > high
-    lowint1 := lowint1[1]
-if highint1 < low
-    highint1 := highint1[1]
+
+var lbllast_up = debugLabelUp("")
+var lbllast_dn = debugLabelDn("")
+if barstate.islast
+    label.set_text(lbllast_up, str.format("{0}",th))
+    label.set_text(lbllast_dn, str.format("{0}",tl))
+    label.set_x(lbllast_up, highint1 > highint1[1] ? bar_index : bar_index-5000)
+    label.set_x(lbllast_dn, lowint1 <= lowint1[1] ? bar_index : bar_index-5000)
+
 
 // plot(highint10, color = color.new(color.blue,50), style = plot.style_steplinebr)
 ph1 = plot(highint1, color = color.new(color.green,50), style = plot.style_steplinebr, linewidth = 3, display = displayOverlayMode)
