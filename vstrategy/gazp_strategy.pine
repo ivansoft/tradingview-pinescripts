@@ -4,6 +4,22 @@
 //@version=6
 strategy("GAZP Pivot Strategy", "gazp_strategy", overlay = true, max_labels_count = 500)
 
+var int fractal = input.int(100, "fractal")
+var float step1p = input.float(0.5, "step 1 %", inline = "01") / 100  // 0.5 %
+var float step10p = input.float(5, "step 10 %", inline = "01") / 100  // 5 %
+var bool bgfill = input.bool(true, "Backgroung Fill")
+
+var divisor = array.from(
+     0.0001, 0.0002, 0.0005,
+     0.001, 0.002, 0.005,
+     0.01, 0.02, 0.05,
+     0.1, 0.2, 0.5,
+     1, 2, 5,
+     10, 20, 50,
+     100, 200, 500,
+     1000, 2000, 5000,
+     10000, 20000, 50000)
+
 debugLabelUp(txt,overlay=true,offset=0) =>
     label.new(bar_index+offset, high, txt, yloc = yloc.abovebar, style = label.style_arrowdown, force_overlay = overlay, textcolor = color.black)
 debugLabelDn(txt,overlay=true,offset=0) =>
@@ -15,16 +31,15 @@ var displayOverlayMode = display.pane
 var allpvh = array.new<float>()
 var allpvl = array.new<float>()
 
-
-fractal = 100
-delim1 = 1.0
-delim10 = 5.0
+// fractal = 100
+// step1 = 1.0
+// step10 = 5.0
 
 pvh = ta.pivothigh(fractal,fractal)
 pvl = ta.pivotlow(fractal,fractal)
 
-plotshape(pvh, "pvh", shape.triangledown, location.abovebar, color.new(color.gray,50), -fractal, size = size.tiny)
-plotshape(pvl, "pvl", shape.triangleup, location.belowbar, color.new(color.gray,50), -fractal, size = size.tiny)
+plotshape(pvh, "pivoth", shape.triangledown, location.abovebar, color.new(color.gray,50), -fractal, size = size.tiny)
+plotshape(pvl, "pivotl", shape.triangleup, location.belowbar, color.new(color.gray,50), -fractal, size = size.tiny)
 
 if not na(pvh)
     debugLabelUp(str.format("{0}",pvh),offset=-fractal)
@@ -57,20 +72,25 @@ tl = ta.lowest(fractal)
 // if tl < lowest 
 //     lowest := tl
 
-plot(th, style = plot.style_steplinebr, color = color.new(color.gray,50))
-plot(tl, style = plot.style_steplinebr, color = color.new(color.gray,50))
+plot(th, "highest", style = plot.style_steplinebr, color = color.new(color.gray,50))
+plot(tl, "lowest", style = plot.style_steplinebr, color = color.new(color.gray,50))
 
 bullish = close > open
 bearish = close < open
 
+dividx1 = divisor.binary_search_rightmost(math.ceil(close * step1p))
+step1 = divisor.get(dividx1)
+dividx10 = divisor.binary_search_rightmost(math.ceil(close * step10p))
+step10 = divisor.get(dividx10)
+
 // highint1 = switch
-//     bullish => delim1 * math.ceil(high / delim1)
-//     bearish => delim1 * math.ceil(high / delim1)
-//     => delim1 * math.round(high / delim1)
-highint1 = delim1 * math.ceil(high / delim1)
-lowint1 = delim1 * math.floor(low / delim1)
-// highint10 = delim10 * math.round(high / delim10)
-// lowint10 = delim10 * math.round(low / delim10)
+//     bullish => step1 * math.ceil(high / step1)
+//     bearish => step1 * math.ceil(high / step1)
+//     => step1 * math.round(high / step1)
+highint1 = step1 * math.ceil(high / step1)
+lowint1 = step1 * math.floor(low / step1)
+highint10 = step10 * math.round(high / step10)
+lowint10 = step10 * math.round(low / step10)
 
 // if lowint1 > high
 //     lowint1 := lowint1[1]
@@ -80,18 +100,19 @@ lowint1 = delim1 * math.floor(low / delim1)
 var lbllast_up = debugLabelUp("")
 var lbllast_dn = debugLabelDn("")
 if barstate.islast
-    label.set_text(lbllast_up, str.format("{0}",th))
-    label.set_text(lbllast_dn, str.format("{0}",tl))
+    label.set_text(lbllast_up, str.format("{1}\n{0}",th,close))
+    label.set_text(lbllast_dn, str.format("{0}\n{1}",tl,close))
     label.set_x(lbllast_up, highint1 > highint1[1] ? bar_index : bar_index-5000)
     label.set_x(lbllast_dn, lowint1 <= lowint1[1] ? bar_index : bar_index-5000)
 
 
 // plot(highint10, color = color.new(color.blue,50), style = plot.style_steplinebr)
-ph1 = plot(highint1, color = color.new(color.green,50), style = plot.style_steplinebr, linewidth = 3, display = displayOverlayMode)
 // plot(lowint10, color = color.new(color.blue,50), style = plot.style_steplinebr)
-pl1 = plot(lowint1, color = color.new(color.red,50), style = plot.style_steplinebr, linewidth = 2, display = displayOverlayMode)
+ph1 = plot(highint1, "high", color = color.new(color.green,50), style = plot.style_steplinebr, linewidth = 3, display = displayOverlayMode)
+pl1 = plot(lowint1, "low", color = color.new(color.red,50), style = plot.style_steplinebr, linewidth = 2, display = displayOverlayMode)
 
 fillcolor = switch
+    not bgfill => na
     bullish => color.new(color.green,90)
     bearish => color.new(color.red,90)
     => color.new(color.gray,50)
