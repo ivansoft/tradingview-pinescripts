@@ -2,7 +2,7 @@
 // © ivansoft
 
 //@version=6
-strategy("GAZP Pivot Strategy", "gazp_strategy", overlay = true, max_labels_count = 500)
+strategy("PriceStep Pivot Strategy", "price_step_strategy", overlay = true, max_labels_count = 500)
 
 var int fractal = input.int(100, "fractal")
 var float step1p = input.float(0.5, "step 1 %", inline = "01") / 100  // 0.5 %
