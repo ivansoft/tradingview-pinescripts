@@ -1,14 +1,19 @@
 //@version=6
-indicator("Trend by Linreg Slope", "linreg_slope", precision = 3, timeframe = "3")
+indicator("Trend by Linreg Slope", "linreg_slope", precision = 3)
 
-int period = input.int(100, "period linreg", inline = "01")
+int barslinreg = input.int(100, "period linreg", inline = "01")
+int barssma = input.int(2, "period sma", inline = "02")
 
 oc2 = (open + close) / 2
-source_linreg = oc2
 
-float slope = ta.linreg(source_linreg, period, 0) - ta.linreg(source_linreg, period, 1)
-color plotColor = slope > 0 ? color.teal : color.maroon
+source_linreg = ta.sma(oc2, barssma)
 
+float linreg = ta.linreg(source_linreg, barslinreg, 0)
+float slope = 
+     ta.linreg(source_linreg, barslinreg, 0) -
+     ta.linreg(source_linreg, barslinreg, 1)
 
-plot(ta.linreg(source_linreg, period, 0), "linreg", force_overlay = true)
-plot(slope, "slope", plotColor, 1, plot.style_area)
+color colorslope = slope > 0 ? color.teal : color.maroon
+
+plot(linreg, "linreg", force_overlay = true)
+plot(slope, "slope", colorslope, 1, plot.style_area)
