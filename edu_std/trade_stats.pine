@@ -1,0 +1,455 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © TradingView
+
+//@version=5
+indicator("Position Tool", overlay = true)
+
+// Position Tool
+// v2, 2023.06.25
+
+// This code was written using the recommendations from the Pine Script™ User Manual's Style Guide:
+//   https://www.tradingview.com/pine-script-docs/en/v5/writing/Style_guide.html
+
+
+
+import TradingView/ta/6 as ta
+
+
+
+//#region ———————————————————— Constants and Inputs
+
+
+color  VENETIAN   = #C90707
+color  WHITE      = #ffffff
+color  STORM_GREY = #787b86
+color  GRAY_LT    = #9598a1
+color  GREEN_MD   = color.new(#009688, 70)
+color  RED_MD     = color.new(#f44336, 70)
+color  GREEN_LT   = color.new(#009688, 90)
+color  RED_LT     = color.new(#f44336, 90)
+
+string CI1 = "Default"
+string EI1 = "Open Position"
+string EI2 = "Always"
+string EI3 = "Never"
+
+string EP_TT = "Click at the point in time where an order is placed, using the order's entry level. The trade will be entered when this level is reached."
+string TP_TT = "Set the profit level where the position will be exited. It must be above the entry level for longs, and below for shorts."
+string SL_TT = "Set the stop loss level where the position will be exited. It must be below the entry level for longs, and above for shorts."
+
+
+string GRP1              = "Trade Sizing"
+float  sizeInput         = input.float(1000.0,     "Account Size",       group = GRP1, inline = "11", minval  = 0.0)
+float  riskValueInput    = input.float(10,         "Risk    ",           group = GRP1, inline = "12", minval  = 0)
+string currencyInput     = input.string(CI1,       "",                   group = GRP1, inline = "11", options = [CI1, "USD", "EUR", "CAD", "JPY", "GBP", "HKD", "CNY", "NZD", "RUB", "AUD", "CHF", "NOK", "SEK", "SGD", "TRY", "ZAR", "MYR", "KRW", "USDT", "INR"])
+string riskUnitInput     = input.string("%",       "",                   group = GRP1, inline = "12", options = ["%", "Account Currency"])
+int    lotSizeInput      = input.int(1,            "Lot Size    ",       group = GRP1, inline = "13", minval  = 1)
+
+string GRP2              = "Trade Levels"
+float  entryPriceInput   = input.price(0,          "Entry Point",        group = GRP2, confirm = true,                  inline = "21")
+int    entryTime         = input.time(0,           "",                   group = GRP2, confirm = true, tooltip = EP_TT, inline = "21")
+float  inputTpPrice      = input.price(0,          "Take Profit",        group = GRP2, confirm = true, tooltip = TP_TT, inline = "22")
+float  inputSlPrice      = input.price(0,          "Stop Loss",          group = GRP2, confirm = true, tooltip = SL_TT, inline = "23")
+
+string GRP3              = "Style"
+color  entryColorInput   = input.color(STORM_GREY, "Lines",              group = GRP3, inline = "31")
+color  tpColorInput      = input.color(GREEN_LT,   " TP and SL Zones   ",group = GRP3, inline = "31")
+color  slColorInput      = input.color(RED_LT,     "",                   group = GRP3, inline = "31")
+color  txtColorInput     = input.color(GRAY_LT,    "Text ",              group = GRP3, inline = "32")
+color  txtBgTpColorInput = input.color(GREEN_MD,   " Text backgrounds",  group = GRP3, inline = "32")
+color  txtBgSlColorInput = input.color(RED_MD,     "",                   group = GRP3, inline = "32")
+bool   showCurrencyUnits = input.bool(true,        "Show currency",      group = GRP3, inline = "33")
+string extendInput       = input.string(EI1,       "  Extend Right",     group = GRP3, inline = "33", options = [EI1, EI2, EI3])
+
+string GRP4              = "Target and Stop Labels"
+bool   showPriceInput    = input.bool(true,        "Price",              group = GRP4, inline = "41")
+bool   showStopInput     = input.bool(true,        "Value",              group = GRP4, inline = "41")
+bool   showPercInput     = input.bool(true,        "Percent",            group = GRP4, inline = "41")
+bool   showTicksInput    = input.bool(true,        "Tick",               group = GRP4, inline = "41")
+bool   showAmountInput   = input.bool(true,        "Amount",             group = GRP4, inline = "41")
+
+string GRP5              = "Order Label"
+bool   showTPriceInput   = input.bool(true,        "Entry price",        group = GRP5, inline = "51")
+bool   showTPlInput      = input.bool(true,        "P & L",              group = GRP5, inline = "51")
+bool   showTQtyInput     = input.bool(true,        "Quantity",           group = GRP5, inline = "51")
+bool   showTRRInput      = input.bool(true,        "RR",                 group = GRP5, inline = "51")
+bool   showTPipInput     = input.bool(true,        "Per Tick/Pip",       group = GRP5, inline = "51")
+bool   showTCagrInput    = input.bool(true,        "CAGR",               group = GRP5, inline = "51")
+//#endregion
+
+
+
+//#region ———————————————————— Global variables 
+
+
+// Round trade values to chart precision.
+float entryPrice = math.round_to_mintick(entryPriceInput)
+float tpPrice    = math.round_to_mintick(inputTpPrice)
+float slPrice    = math.round_to_mintick(inputSlPrice)
+
+var bool isOrderClosedByBracket = na
+var int  realEntryTime          = na
+string   extend                 = extendInput == EI3 ? extend.none : extend.right
+
+// Declare line objects for display. Locations to be set during trade. 
+var line entryPriceLine         = line.new(entryTime, entryPrice, na, na, xloc = xloc.bar_time, color = entryColorInput, extend = extend)
+var line pointerOrderPriceLine  = line.new(entryTime, entryPrice, na, na, xloc = xloc.bar_time, color = entryColorInput, style  = line.style_dashed)
+
+// Declare box objects for trade zones. Locations to be set during trade. 
+var box tpZone     = box.new(entryTime, tpPrice, na, entryPrice, xloc = xloc.bar_time, extend = extend, bgcolor = tpColorInput, border_width = 0)
+var box slZone     = box.new(entryTime, slPrice, na, entryPrice, xloc = xloc.bar_time, extend = extend, bgcolor = slColorInput, border_width = 0)
+var box orderZone  = box.new(na,        na,      na, entryPrice, xloc = xloc.bar_time,                  bgcolor = na,           border_width = 0)
+
+// Declare label objects for order information display. Locations to be set during trade. 
+var label profit   = label.new(na, tpPrice,    "", style = label.style_label_center, color = txtBgTpColorInput, textcolor = txtColorInput, xloc = xloc.bar_time)
+var label loss     = label.new(na, slPrice,    "", style = label.style_label_center, color = txtBgSlColorInput, textcolor = txtColorInput, xloc = xloc.bar_time)
+var label mainInfo = label.new(na, entryPrice, "", style = label.style_label_center, color = na,                textcolor = txtColorInput, xloc = xloc.bar_time)
+//#endregion
+
+
+
+//#region ———————————————————— Functions 
+
+
+// @function                Determines the currency based on the input value selected by the user/
+// @returns                 (float) Returns a string with short currency name.
+defineCurrency() =>
+    string currency = currencyInput == CI1 ? "" : currencyInput
+    
+
+// @function                Converts a price to a user defined currency using `request.security()`. 
+// @param price             (series float) The price to convert.
+// @param currency          (simple string) The currency to convert
+// @returns                 (float) Returns a value in the user-chosen currency converted from `price`. 
+convertCurrency(series float price, simple string currency) =>
+    if syminfo.basecurrency == currency and not na(syminfo.basecurrency)
+        string errorString = "Invalid operation: Conversion currency ({0}) cannot be the same as the base currency ({1}). Please select a different conversion currency."
+        runtime.error(str.format(errorString, currency, syminfo.basecurrency))
+    float convertedClose = request.security(syminfo.tickerid, timeframe.period, close, currency = currency, ignore_invalid_symbol = true)
+    float ratio  = convertedClose / close
+    float result = math.round_to_mintick(price * ratio)
+
+
+// @function                Determines profit or loss given the entry price calculated against another price. 
+// @param price             (series float) Price to calculate profit from.  
+// @param entryPrice        (series float) The price of entry for the position.
+// @param qty               (series float) Number of contracts in an open position
+// @param isLongPosition    (series bool) The condition determining whether the trade is a "long" or a "short" position. 
+// @returns                 (float) The profit or loss of the trade based on the `price` relative to the `entryPrice` taking into account whether or not the trade `isLongPosition`.
+calcPL(series float price, series float entryPrice, series float qty, series bool isLongPosition) =>
+    float pl = math.round_to_mintick((price - entryPrice) * qty) 
+    float result = isLongPosition ? pl : pl * -1
+
+
+// @function                Calculates the risk amount for a given position size. The risk amount can be specified either as a percentage or a fixed amount through `riskUnitInput` in the settings..
+// @param size              (series float) The size of the position for which the risk amount is calculated.
+// @returns                 (float) The calculated risk amount. If the risk unit input is "%", it returns the risk amount as a percentage of the size. If the risk unit input is not "%", it returns the risk amount as it is.
+calcRiskAmount(series float size) =>
+    float currecyValueRiskAmount = riskUnitInput == "%" ? size * riskValueInput * 0.01 : riskValueInput
+
+
+// @function                Calculates a position size and a quantity per lot of the account size to risk based on the user-chosen "risk percent".
+// @param riskAmount        (series float) The account size to use in the risk calculation. 
+// @param lossSize          (series float) The value of loss based on the user defined risk. 
+// @returns                 ([float, float]) A tuple of the trade quantity and a ratio of the quantity per lot. 
+calcQty(series float riskAmount, series float lossSize) =>
+    var bool  floatContracts = syminfo.type == "crypto" or syminfo.type == "futures"
+    var float qty = floatContracts ? riskAmount / math.abs(lossSize) : math.floor(riskAmount / math.abs(lossSize))
+    var float qtyPerLot = floatContracts ? qty / lotSizeInput : math.floor(qty / lotSizeInput)
+    [qty, qtyPerLot]
+
+
+// @function                Calculates a difference between a `price` and the `entryPrice` in absolute terms. 
+// @param price             (series float) The price to calculate the difference from. 
+// @param entryPrice        (series float) The price of entry for the position.
+// @returns                 (float) The absolute price displacement of a price from an entry price.  
+calcProfitLossSize(series float price, series float entryPrice, series bool isLongPosition) =>
+    float priceDiff = price - entryPrice
+    float result = isLongPosition ? priceDiff : priceDiff * -1
+
+
+// @function                Calculates the absolute size of a profit or loss given the `price` relative to the `entryPrice`, as well as the `price` as a percent of the `entry price`. 
+// @param price             (series float) The price to calculate the difference from. 
+// @param entryPrice        (series float) The price of entry for the position.
+// @returns                 ([float, float]) A tuple of the PnL size in absolute terms and in a percent rounded to two decimal places. 
+calcOrderProfitLossParam(series float price, series float entryPrice, series bool isLongPosition) =>
+    float orderProfitLossSize    = calcProfitLossSize(price, entryPrice, isLongPosition)
+    float orderProfitLossPercent = math.round(orderProfitLossSize / entryPrice * 100, 2)
+    [orderProfitLossSize, orderProfitLossPercent]
+
+
+// @function                Calculates the chart symbol's base unit of change in asset prices.
+// @returns                 (float) A ticks or pips value of base units of change. 
+calcBaseUnit() =>
+    bool  isForexSymbol = syminfo.type         == "forex"
+    bool  isYenQuote    = syminfo.currency     == "JPY"
+    bool  isYenBase     = syminfo.basecurrency == "JPY"
+    float result = isForexSymbol ? isYenQuote ? 0.01 : isYenBase ? 0.00001 : 0.0001 : syminfo.mintick
+    
+
+// @function                Converts the `orderSize` to ticks. 
+// @param orderSize         (series float) The order size to convert to ticks.
+// @param unit              (simple float) The basic units of change in asset prices.
+// @returns                 (int) A tick value based on a given order size. 
+calcOrderPipsOrTicks(series float orderSize, simple float unit) =>
+    int result = math.abs(math.round(orderSize / unit))
+
+
+// @function                Calculates the money value of the PnL.  
+// @param qty               (series float) The quantity of contracts to use in the PnL calculation. 
+// @param orderProfitLossSize (series float) The size of the PnL in absolute terms. 
+// @returns                 (float) A cash value of the PnL in the symbol's currency. 
+calcProfitLossRiskSize(series float qty, series float orderProfitLossSize) =>
+    float result = qty * orderProfitLossSize * syminfo.pointvalue
+
+
+// @function                Calculates an end equity value given the initial account equity and the open PnL. 
+// @param size              (series float) The initial equity value before trades. 
+// @param riskSize          (series float) The size of the profit or loss in absolute terms.
+// @returns                 (float) The account equity after PnL. 
+calcOrderProfitLossAmount(series float size, series float riskSize) =>
+    float result = size + riskSize
+
+
+// @function                Calculates a risk to reward ratio given the size of profit and loss. 
+// @param profitSize        (series float) The size of the profit in absolute terms. 
+// @param lossSize          (series float) The size of the loss in absolute terms. 
+// @returns                 (float) The ratio between the `profitSize` to the `lossSize`
+calcRiskRewardRatio(series float profitSize, series float lossSize) =>
+    float result = math.abs(math.round(profitSize / lossSize, 2))
+
+
+// @function                Calculates a ratio of the profit or loss per pip. 
+// @param riskSize          (series float) The profit or loss for the position in absolute terms.
+// @param units             (series float) Amount of the basic units of change in asset prices.
+// @returns                 (float) A ratio of the PnL on a per pip basis. 
+calcProfitlossPerPipOrTick(series float riskSize, series float units) =>
+    float result  = riskSize / units
+
+
+// @function                Determine a color by the profit or loss value.
+// @param price             (series float) The profit or loss value for the color defenition.
+// @returns                 (color) A color of for the current profit or loss value. 
+getColorByPositionReturn(series float price) =>
+    color result = price >= 0 ? txtBgTpColorInput : txtBgSlColorInput
+
+
+// @function                Calculates an exit price considering the `sl` and `tp` price and returns a color for the exit zone. 
+// @param isLongPosition    (series bool) Condition that determines whether the position is long or short. 
+// @param tp                (series float) The take profit price for the position. 
+// @param sl                (series float) The stop loss price for the position.
+// @returns                 ([float, color]) A tuple of the exit price and a color that is dependant on whether that price is the `tp` or the `sl`.
+getExitParams(series bool isLongPosition, series float tp, series float sl) =>
+    float takeProfit = tp
+    float stopLoss   = sl
+    if not isLongPosition
+        takeProfit  := sl
+        stopLoss    := tp
+    float exitPrice     = high >= takeProfit ? takeProfit : low <= stopLoss ? stopLoss : close
+    color exitZoneColor = isLongPosition and exitPrice > entryPrice or 
+                      not isLongPosition and exitPrice < entryPrice ?  tpColorInput : slColorInput
+    [exitPrice, exitZoneColor]
+
+
+// @function                Sets the text and the position of a label on the x axis. If the `txt` argument is blank, the label will be deleted. 
+// @param labelId           (label) The id of the label to be modified. 
+// @param x                 (series int) The position of the label on the x axis in a timestamp. 
+// @param txt               (series string) The text to set in the label. 
+// @returns                 (void) Updates a label identified by `labelId` with a position on the `x` axis with `text`. If no text is defined, the label is deleted.
+labelSetInfo(label labelId, series int x, series string txt, series color col) =>
+    if txt == ""
+        label.delete(labelId)
+    else
+        label.set_x(labelId, x)
+        label.set_text(labelId, txt)
+        label.set_color(labelId, col)
+
+
+// @function                Concatenates trade metrics into a string suitable for display in a label at the take profit or stop loss level. 
+// @param price             (series float) The price of the level.
+// @param size              (series float) The contract quantity of the trade. 
+// @param percent           (series float) The distance from the entry price to the level in percent. 
+// @param ticks             (series int) The distance from the entry price to the level in ticks. 
+// @param amount            (series float) The money value of the account considering the size of the profit or loss.
+// @param isTarget          (series bool) A condition to determine if the level is the target level or not. 
+// @returns                 (void) A string for display within a label at the stop or limit level. Includes the distance in money value to the stop or target, 
+//                          the `percent` change to the level, the distance in `ticks`, the money value of the account if the level were reached, and a ratio of the amount `perPipOrTick`.  
+getLevelInfo(series float price, series float size, series float percent, series int ticks, series float amount, simple string currency, series bool isTarget) =>
+    string resultInfo = ""
+    string level = isTarget ? "Target: " : "Stop: "
+    string unit = syminfo.type == "forex" ? "Pip" : "Tick"
+    string cur = showCurrencyUnits ? " " + currency : ""
+    string targetStopPriceString   = showPriceInput  ? str.format("@{0,number},", price) : ""
+    string targetStopString        = showStopInput   ? str.format(" {0,number,###,###,###.######}{1}", size, cur) : ""
+    string targetStopPercentString = showPercInput   ? str.format(" ({0,number,#.###}%)", percent) : ""
+    string targetStopTicksString   = showTicksInput  ? str.format(" {0,number,#} {1}s", ticks, unit) : ""
+    string targetStopAmountString  = showAmountInput ? str.format("\nAmount: {0,number,###,###,###.##}{1}", amount, cur) : ""
+    resultInfo := targetStopPriceString + targetStopString + targetStopPercentString + targetStopTicksString + targetStopAmountString
+    resultInfo := resultInfo != "" and (showStopInput or showPercInput or showTicksInput) ? level + resultInfo : resultInfo
+
+
+// @function                Creates a string for display of order metrics in a label. 
+// @param price             (series float) The entry price of the position.
+// @param pl                (series float) The PnL value of the position. 
+// @param qty               (series float) The quantity of contracts in the position. 
+// @param perPipOrTick      (series float) The ratio of the profit or loss on a per-pip basis. 
+// @param riskReward        (series float) The risk to reward ratio. 
+// @param cagr              (series float) The value of the compound annual growth rate.
+// @param isOrderOpen       (series bool) Condition determining if the order is currently open.
+// @param isOrderClosedByBracket (series bool) Condition determining if the order is currently closed.
+// @returns                 (string) A string concatenating the order position, PnL, quantity, risk to reward ratio, and the CAGR. 
+getOrderInfo(series float price, series float pl, series float qty, series float perPipOrTick, series float riskReward, series float cagr, series bool isOrderOpen, series bool isOrderClosedByBracket, simple string currency) =>
+    string orderPosition = switch
+        isOrderClosedByBracket => "Closed"
+        isOrderOpen            => "Open"
+        =>                        "Position isn't open yet"
+    string cur = showCurrencyUnits ? str.format(" {0}", currency) : ""
+    string unit = syminfo.type == "forex" ? "Pip" : "Tick"
+    bool hasPositionStatus  = orderPosition != "Position isn't open yet"
+    string priceString      = showTPriceInput ? str.format("@{0,number}, ", price) : ""
+    string plString         = showTPlInput and hasPositionStatus ? str.format(" P&L: {0,number,###,###,###.##}{1}", pl, cur) : ""
+    string qtyString        = showTQtyInput                      ? str.format(", Qty: {0,number}", qty) : ""
+    string riskRewardString = showTRRInput                       ? str.format("\nRR: {0,number,#.##}:1", riskReward) : ""
+    string cagrString       = showTCagrInput and not na(cagr)    ? str.format("\nCAGR: {0,number,###,###.#}%", cagr) : ""
+    string perPipString     = showTPipInput                      ? str.format(", Per {0}: {1,number}{2}", unit, math.round_to_mintick(perPipOrTick), cur) : ""
+    string result           = priceString + orderPosition + plString + qtyString + riskRewardString + perPipString + cagrString
+
+
+// @function                Updates location, color, and text for order information labels.
+// @param lblProfitText     (series string) Text for the profit label.
+// @param profitColor       (series color) Color for the profit label.
+// @param lblLossText       (series string) Text for the loss label.
+// @param lossColor         (series color) Color for the loss label.
+// @param lblOrderInfo      (series string) Text for the main order label.
+// @param plColor           (series color) Color for the main order label.
+// @returns                 (void) Sets text and location attributes for the profit, loss, and main order labels.
+drawOrderInfo(series string lblProfitText, series color profitColor, series string lblLossText, series color lossColor, series string lblOrderInfo, series color plColor) =>
+    int drawingCenter = math.round(time - (time - entryTime)/2)
+    labelSetInfo(profit,   drawingCenter, lblProfitText, profitColor)
+    labelSetInfo(loss,     drawingCenter, lblLossText,   lossColor)
+    labelSetInfo(mainInfo, drawingCenter, lblOrderInfo,  plColor)
+
+
+// @function                Sets location and color for trade zone and order pointer line. 
+// @param exitPrice         (series float) The exit price of the position. 
+// @param realEntryPrice    (series float) The entry price of the position. 
+// @param realEntryTime     (series int) The entry time of the position.
+// @param orderZoneColor    (series color) The color for the order zone. 
+// @returns                 (void) Sets box attributes to update the order zone dimensions and color as the trade progresses, and sets start and end locations for the trade pointer line. 
+redrawOrderZone(series float exitPrice, series float realEntryPrice, series int realEntryTime, series color orderZoneColor) =>
+    line.set_xy1(pointerOrderPriceLine, realEntryTime, realEntryPrice)
+    line.set_xy2(pointerOrderPriceLine, time, exitPrice)
+    box.set_lefttop(orderZone, realEntryTime, exitPrice)
+    box.set_right(orderZone, time)
+    box.set_bgcolor(orderZone, orderZoneColor)
+//#endregion
+
+
+
+//#region ———————————————————— Calculations 
+
+
+// Create an error if the target and stop are not on either side of the entry price. 
+if (slPrice > entryPrice and tpPrice > entryPrice) or (slPrice < entryPrice and tpPrice < entryPrice)
+    runtime.error("The 'Target' and 'Stop' levels are misplaced. One must be set above the 'Entry Price', the other below.")
+
+// Calculate trade parameters in user-selected currency. 
+string currency             = defineCurrency()
+float  exitPrice            = close
+float  convertedPrice       = convertCurrency(exitPrice,  currency)
+float  convertedEntryPrice  = convertCurrency(entryPrice, currency)
+float  convertedTpPrice     = convertCurrency(tpPrice,    currency)
+float  convertedSlPrice     = convertCurrency(slPrice,    currency)
+float  convertedAccountSize = convertCurrency(sizeInput,  currency)
+
+// Check that the entry time has been exceeded by the chart series to begin calcs and display. Stop when the order has been calculated as closed . 
+[p, l] = if time >= entryTime and not isOrderClosedByBracket
+    // Set trade parameters and locations of boxes and lines used for order display. 
+    var color exitZoneColor = entryColorInput
+    bool isLongPosition = tpPrice > slPrice
+    realEntryTime := na(realEntryTime[1]) and (low <= entryPrice and high >= entryPrice) ? time : realEntryTime[1]
+    line.set_xy2(entryPriceLine, time, entryPrice)
+    box.set_right(tpZone, time)
+    box.set_right(slZone, time)
+    
+    isOrderOpen = not na(realEntryTime)
+    // Check if an order is open. 
+    if isOrderOpen
+        // Get an exit price and zone color based on the trade bias, tp, and sl price. 
+        [currentExitPrice, currentExitZoneColor] = getExitParams(isLongPosition, tpPrice, slPrice)
+        exitZoneColor := currentExitZoneColor
+        // Check if the order has been closed.
+        isOrderClosedByBracket := currentExitPrice != exitPrice
+        if isOrderClosedByBracket
+            convertedPrice := convertCurrency(currentExitPrice, currency)
+        // Update order zone and pointer line locations/ color. 
+        redrawOrderZone(currentExitPrice, entryPrice, realEntryTime, exitZoneColor)
+        
+        var float fixedEntryPrice = convertedEntryPrice
+        convertedEntryPrice := fixedEntryPrice
+        
+        // Check if a position was opened, if so send an alert. 
+        if not isOrderOpen[1]
+            alert(str.format("The position was entered at the price {0, number}", entryPrice), alert.freq_once_per_bar)
+        
+        // Check if the stop or take profit price has been hit and send an alert. 
+        if isOrderClosedByBracket
+            if currentExitPrice == tpPrice
+                alert(str.format("The position was closed by Take Profit at the price {0, number}", currentExitPrice), alert.freq_once_per_bar)
+            if currentExitPrice == slPrice
+                alert(str.format("The position was closed by Stop Loss at the price {0, number}", currentExitPrice), alert.freq_once_per_bar)
+    
+    
+    // Calculate trade metrics for position.
+    [profitSize, profitPercent] = calcOrderProfitLossParam(convertedTpPrice, convertedEntryPrice, isLongPosition)
+    [lossSize, lossPercent]     = calcOrderProfitLossParam(convertedSlPrice, convertedEntryPrice, isLongPosition)
+    float riskAmount            = calcRiskAmount(sizeInput)
+    [qty, qtyPerLot]            = calcQty(riskAmount, lossSize)
+
+    // Calculate PnL.
+    float PL = calcPL(convertedPrice, convertedEntryPrice, qty, isLongPosition)
+    
+    // Calculate the profit and loss in ticks or pips.
+    var float unit              = calcBaseUnit()
+    var int   profitPipsOrTicks = calcOrderPipsOrTicks(profitSize, unit)
+    var int   lossPipsOrTicks   = calcOrderPipsOrTicks(lossSize, unit)
+ 
+    // Calculate the trade size based on the user-defined account size and risk profile.
+    float profitRiskSize        = calcProfitLossRiskSize(qtyPerLot * lotSizeInput, profitSize)
+    float lossRiskSize          = calcProfitLossRiskSize(qtyPerLot * lotSizeInput, lossSize)
+ 
+    // Calculate the money value of the profit and loss amount in the user-chosen currency.
+    float profitAmount          = calcOrderProfitLossAmount(sizeInput, profitRiskSize) 
+    float lossAmount            = calcOrderProfitLossAmount(sizeInput, lossRiskSize)
+
+    // Calculate the ratio of profit or loss on a per-pip basis. 
+    float profitPerPipOrTick    = calcProfitlossPerPipOrTick(profitRiskSize, profitPipsOrTicks)
+    float lossPerPipOrTick      = calcProfitlossPerPipOrTick(lossRiskSize,   lossPipsOrTicks)
+
+    // Calculate the risk to reward ratio given the size of the potential profit and loss. Calculate the CAGR.
+    float riskRewardRatio       = calcRiskRewardRatio(profitSize, lossSize)
+    float cagr                  = ta.cagr(realEntryTime, convertedEntryPrice, time, convertedPrice)
+
+    // Get the trade metrics for the stop loss and take profit level.
+    string currencyDisplayName  = currency == "" ? syminfo.currency : currency
+    string lblProfitText        = getLevelInfo(tpPrice, profitSize, profitPercent, profitPipsOrTicks, profitAmount, currencyDisplayName, true)
+    string lblLossText          = getLevelInfo(slPrice, lossSize,   lossPercent,   lossPipsOrTicks,   lossAmount,   currencyDisplayName, false)
+    string lblOrderInfo         = getOrderInfo(entryPrice, PL, qtyPerLot, profitPerPipOrTick, riskRewardRatio, cagr, isOrderOpen, isOrderClosedByBracket, currencyDisplayName)
+    
+    // Set the text, color, and location of the order information labels.
+    color profitColor = getColorByPositionReturn(profitSize)
+    color lossColor   = getColorByPositionReturn(lossSize)
+    color plColor     = getColorByPositionReturn(PL)
+    drawOrderInfo(lblProfitText, profitColor, lblLossText, lossColor, lblOrderInfo, plColor)
+
+    // Check if the order is closed and if the user-defined box extension input is enabled. 
+    // If the trade is closed, remove extend right from the exit zones. 
+    if isOrderClosedByBracket and extendInput == EI1
+        box.set_extend(tpZone, extend.none)
+        box.set_extend(slZone, extend.none)
+        line.set_extend(entryPriceLine, extend.none)
+    [profitSize, lossSize]
+//#endregion
+
+plot(p, "p", display = display.data_window)
+plot(l, "l", display = display.data_window)

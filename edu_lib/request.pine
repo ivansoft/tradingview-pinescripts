@@ -1,0 +1,467 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © TradingView
+
+// @version=6
+library("Request")
+
+// Request Library
+// v1, 2025.01.14
+
+// This code was written using the recommendations from the Pine Script™ User Manual's Style guide:
+//    https://www.tradingview.com/pine-script-docs/writing/style-guide/
+
+
+
+import TradingView/LibraryCOT/4 as TVcot
+
+
+
+//#region ———————————————————— COT metric names and directions
+
+
+
+// +-----------------------------------+------------------------+
+// |  Legacy (COT) Metric Names        |       Directions       |
+// +-----------------------------------+------------------------+
+// | Open Interest                     | No direction           |
+// | Noncommercial Positions           | Long, Short, Spreading |
+// | Commercial Positions              | Long, Short            |
+// | Total Reportable Positions        | Long, Short            |
+// | Nonreportable Positions           | Long, Short            |
+// | Traders Total                     | No direction           |
+// | Traders Noncommercial             | Long, Short, Spreading |
+// | Traders Commercial                | Long, Short            |
+// | Traders Total Reportable          | Long, Short            |
+// | Concentration Gross LT 4 TDR      | Long, Short            |
+// | Concentration Gross LT 8 TDR      | Long, Short            |
+// | Concentration Net LT 4 TDR        | Long, Short            |
+// | Concentration Net LT 8 TDR        | Long, Short            |
+// +-----------------------------------+------------------------+
+
+// +-----------------------------------+------------------------+
+// | Disaggregated (COT2) Metric Names |       Directions       |
+// +-----------------------------------+------------------------+
+// | Open Interest                     | No direction           |
+// | Producer Merchant Positions       | Long, Short            |
+// | Swap Positions                    | Long, Short, Spreading |
+// | Managed Money Positions           | Long, Short, Spreading |
+// | Other Reportable Positions        | Long, Short, Spreading |
+// | Total Reportable Positions        | Long, Short            |
+// | Nonreportable Positions           | Long, Short            |
+// | Traders Total                     | No direction           |
+// | Traders Producer Merchant         | Long, Short            |
+// | Traders Swap                      | Long, Short, Spreading |
+// | Traders Managed Money             | Long, Short, Spreading |
+// | Traders Other Reportable          | Long, Short, Spreading |
+// | Traders Total Reportable          | Long, Short            |
+// | Concentration Gross LE 4 TDR      | Long, Short            |
+// | Concentration Gross LE 8 TDR      | Long, Short            |
+// | Concentration Net LE 4 TDR        | Long, Short            |
+// | Concentration Net LE 8 TDR        | Long, Short            |
+// +-----------------------------------+------------------------+
+
+// +-----------------------------------+------------------------+
+// | Financial (COT3) Metric Names     |       Directions       |
+// +-----------------------------------+------------------------+
+// | Open Interest                     | No direction           |
+// | Dealer Positions                  | Long, Short, Spreading |
+// | Asset Manager Positions           | Long, Short, Spreading |
+// | Leveraged Funds Positions         | Long, Short, Spreading |
+// | Other Reportable Positions        | Long, Short, Spreading |
+// | Total Reportable Positions        | Long, Short            |
+// | Nonreportable Positions           | Long, Short            |
+// | Traders Total                     | No direction           |
+// | Traders Dealer                    | Long, Short, Spreading |
+// | Traders Asset Manager             | Long, Short, Spreading |
+// | Traders Leveraged Funds           | Long, Short, Spreading |
+// | Traders Other Reportable          | Long, Short, Spreading |
+// | Traders Total Reportable          | Long, Short            |
+// | Concentration Gross LE 4 TDR      | Long, Short            |
+// | Concentration Gross LE 8 TDR      | Long, Short            |
+// | Concentration Net LE 4 TDR        | Long, Short            |
+// | Concentration Net LE 8 TDR        | Long, Short            |
+// +-----------------------------------+------------------------+
+//#endregion
+
+
+
+//#region ———————————————————— Library functions
+
+
+// @function                (Overload 1 of 2) Requests a value from a specified Federal Reserve Economic Data (FRED) 
+//                          series. FRED is a comprehensive source that hosts numerous U.S. economic datasets. To 
+//                          explore available FRED datasets and codes, search for specific categories or keywords at 
+//                          https://fred.stlouisfed.org/.
+//                          Calls to this function count toward a script's `request.*()` call limit.
+// @param fredCode          (simple string) The unique identifier of the FRED series. The function uses the value 
+//                          to create a valid ticker ID for retrieving FRED data in the format `"FRED:fredCode"`. 
+//                          For example, `"GDP"` refers to the "Gross Domestic Product" series ("FRED:GDP"), and 
+//                          `"GFDEBTN"` refers to the "Federal Debt: Total Public Debt" series ("FRED:GFDEBTN"). 
+// @param gaps              (simple bool) Optional. If `true`, the function returns a non-na value only when a new 
+//                          value is available from the requested context. If `false`, the function returns the latest 
+//                          retrieved value when new data is unavailable. The default is `false`.
+// @returns                 (float) The value from the requested FRED series.
+export fred(simple string fredCode, simple bool gaps = false) =>
+    var gapStrategy   = gaps ? barmerge.gaps_on : barmerge.gaps_off
+	var string symbol = str.format("FRED:{0}", fredCode)
+    float result      = request.security(symbol, timeframe.isintraday ? "1D" : timeframe.period, close, gapStrategy)
+
+
+// @function                (Overload 2 of 2) Requests a value from a specified Federal Reserve Economic Data (FRED) 
+//                          series. FRED is a comprehensive source that hosts numerous U.S. economic datasets. To 
+//                          explore available FRED datasets and codes, search for specific categories or keywords at 
+//                          https://fred.stlouisfed.org/.
+//                          Calls to this function count toward a script's `request.*()` call limit.
+// @param fredCode          (series string) The unique identifier of the FRED series. The function uses the value 
+//                          to create a valid ticker ID for retrieving FRED data in the format `"FRED:fredCode"`. 
+//                          For example, `"GDP"` refers to the "Gross Domestic Product" series ("FRED:GDP"), and 
+//                          `"GFDEBTN"` refers to the "Federal Debt: Total Public Debt" series ("FRED:GFDEBTN"). 
+// @param gaps              (simple bool) Optional. If `true`, the function returns a non-na value only when a new 
+//                          value is available from the requested context. If `false`, the function returns the latest 
+//                          retrieved value when new data is unavailable. The default is `false`.
+// @returns                 (float) The value from the requested FRED series.
+export fred(series string fredCode, simple bool gaps = false) =>
+    var gapStrategy = gaps ? barmerge.gaps_on : barmerge.gaps_off
+	string symbol   = str.format("FRED:{0}", fredCode)
+    float  result   = request.security(symbol, timeframe.isintraday ? "1D" : timeframe.period, close, gapStrategy)
+
+
+// @function                (Overload 1 of 2) Requests FINRA daily short sale volume data for a specified symbol from 
+//                          one of the following exchanges: NASDAQ, NYSE, NYSE ARCA. If the chart uses an intraday 
+//                          timeframe, the function requests data from the "1D" timeframe. Otherwise, it uses the 
+//                          chart's timeframe.
+//                          Calls to this function count toward a script's `request.*()` call limit.
+// @param symbol            (simple string) The symbol for which to request short sale volume data.
+//                          If the specified value contains an exchange prefix, it must be one of the following: 
+//                          "NASDAQ", "NYSE", "AMEX", "BATS".
+// @param gaps              (simple bool) Optional. If `true`, the function returns a non-na value only when a new 
+//                          value is available from the requested context. If `false`, the function returns the latest 
+//                          retrieved value when new data is unavailable. The default is `false`.
+// @param repaint           (simple bool) Optional. If `true` and the chart's timeframe is intraday, the 
+//                          value requested on realtime bars may change its time offset after the script restarts its 
+//                          executions. If `false`, the function returns the last confirmed period's values to avoid 
+//                          repainting. The default is `true`.
+// @returns                 (float) The short sale volume for the specified symbol or the chart's symbol. 
+export finraShortSaleVolume(simple string symbol, simple bool gaps = false, simple bool repaint = true) =>
+    var array<string> validPrefixes = array.from("BATS", "NASDAQ", "NYSE", "AMEX")
+    var string prefix = syminfo.prefix(symbol)
+    var string ticker = syminfo.ticker(symbol)
+    if not na(prefix) and not validPrefixes.includes(prefix)
+        runtime.error(
+             str.format(
+                 "Short sale volume data is not available for symbols with the {1}{0}{1} exchange prefix.
+                 Supported prefixes are: {1}NASDAQ{1}, {1}NYSE{1}, {1}AMEX{1}, {1}BATS{1}", prefix, "'"
+             )
+         )
+    var gapStrategy             = gaps ? barmerge.gaps_on : barmerge.gaps_off
+    var string timeframe        = timeframe.isintraday ? "1D" : timeframe.period
+    var string shortVolTickerID = str.format("FINRA:{0}_SHORT_VOLUME", ticker)
+    float result = switch
+        repaint or timeframe.isdwm => request.security(shortVolTickerID, timeframe, close, gapStrategy)
+        => request.security(shortVolTickerID, timeframe, close[1], gapStrategy, barmerge.lookahead_on)
+
+
+// @function                (Overload 2 of 2) Requests FINRA daily short sale volume data for a specified symbol from 
+//                          one of the following exchanges: NASDAQ, NYSE, NYSE ARCA. If the chart uses an intraday 
+//                          timeframe, the function requests data from the "1D" timeframe. Otherwise, it uses the 
+//                          chart's timeframe.
+//                          Calls to this function count toward a script's `request.*()` call limit.
+// @param symbol            (series string) The symbol for which to request short sale volume data.
+//                          If the specified value contains an exchange prefix, it must be one of the following: 
+//                          "NASDAQ", "NYSE", "AMEX", "BATS".
+// @param gaps              (simple bool) Optional. If `true`, the function returns a non-na value only when a new 
+//                          value is available from the requested context. If `false`, the function returns the latest 
+//                          retrieved value when new data is unavailable. The default is `false`.
+// @param repaint           (simple bool) Optional. If `true` and the chart's timeframe is intraday, the 
+//                          value requested on realtime bars may change its time offset after the script restarts its 
+//                          executions. If `false`, the function returns the last confirmed period's values to avoid 
+//                          repainting. The default is `true`.
+// @returns                 (float) The short sale volume for the specified symbol or the chart's symbol. 
+export finraShortSaleVolume(series string symbol, simple bool gaps = false, simple bool repaint = true) =>
+    var array<string> validPrefixes = array.from("BATS", "NASDAQ", "NYSE", "AMEX")
+    string prefix = syminfo.prefix(symbol)
+    string ticker = syminfo.ticker(symbol)
+    if not na(prefix) and not validPrefixes.includes(prefix)
+        runtime.error(
+             str.format(
+                 "Short sale volume data is not available for symbols with the {1}{0}{1} exchange prefix.
+                 Supported prefixes are: {1}NASDAQ{1}, {1}NYSE{1}, {1}AMEX{1}, {1}BATS{1}", prefix, "'"
+             )
+         )
+    var gapStrategy         = gaps ? barmerge.gaps_on : barmerge.gaps_off
+    var string timeframe    = timeframe.isintraday ? "1D" : timeframe.period
+    string shortVolTickerID = str.format("FINRA:{0}_SHORT_VOLUME", ticker)
+    float result = switch
+        repaint or timeframe.isdwm => request.security(shortVolTickerID, timeframe, close, gapStrategy)
+        => request.security(shortVolTickerID, timeframe, close[1], gapStrategy, barmerge.lookahead_on)
+
+
+// @function                (Overload 1 of 2) Requests EOD open interest (OI) and OI rising information for a valid 
+//                          futures symbol. If the chart uses an intraday timeframe, the function requests data from 
+//                          the "1D" timeframe. Otherwise, it uses the chart's timeframe. 
+//                          Calls to this function count toward a script's `request.*()` call limit.
+// @param symbol            (simple string) The symbol for which to request open interest data.
+// @param gaps              (simple bool) Optional. If `true`, the function returns non-na values only when new values 
+//                          are available from the requested context. If `false`, the function returns the latest 
+//                          retrieved values when new data is unavailable. The default is `false`.
+// @param repaint           (simple bool) Optional. If `true` and the chart's timeframe is intraday, the 
+//                          value requested on realtime bars may change its time offset after the script restarts its 
+//                          executions. If `false`, the function returns the last confirmed period's values to avoid 
+//                          repainting. The default is `true`.
+// @returns                 ([float, bool]) A tuple containing the following values:
+//                          - The closing OI value for the symbol.
+//                          - `true` if the closing OI is above the previous period's value, `false` otherwise.
+export openInterestFutures(simple string symbol, simple bool gaps = false, simple bool repaint = true) =>
+    var gapStrategy       = gaps ? barmerge.gaps_on : barmerge.gaps_off
+    var string timeframe  = timeframe.isintraday ? "1D" : timeframe.period
+    var string oiTickerID = str.format("{0}_OI", ticker.standard(symbol))
+    [oi, oiRising] = switch
+        repaint or timeframe.isdwm => request.security(oiTickerID, timeframe, [close, close > close[1]], gapStrategy)
+        => request.security(oiTickerID, timeframe, [close[1], close[1] > close[2]], gapStrategy, barmerge.lookahead_on)
+
+
+// @function                (Overload 2 of 2) Requests EOD open interest (OI) and OI rising information for a valid 
+//                          futures symbol. If the chart uses an intraday timeframe, the function requests data from 
+//                          the "1D" timeframe. Otherwise, it uses the chart's timeframe. 
+//                          Calls to this function count toward a script's `request.*()` call limit.
+// @param symbol            (series string) The symbol for which to request open interest data.
+// @param gaps              (simple bool) Optional. If `true`, the function returns non-na values only when new values 
+//                          are available from the requested context. If `false`, the function returns the latest 
+//                          retrieved values when new data is unavailable. The default is `false`.
+// @param repaint           (simple bool) Optional. If `true` and the chart's timeframe is intraday, the 
+//                          value requested on realtime bars may change its time offset after the script restarts its 
+//                          executions. If `false`, the function returns the last confirmed period's values to avoid 
+//                          repainting. The default is `true`.
+// @returns                 ([float, bool]) A tuple containing the following values:
+//                          - The closing OI value for the symbol.
+//                          - `true` if the closing OI is above the previous period's value, `false` otherwise.
+export openInterestFutures(series string symbol, simple bool gaps = false, simple bool repaint = true) =>
+    var gapStrategy       = gaps ? barmerge.gaps_on : barmerge.gaps_off
+    var string timeframe  = timeframe.isintraday ? "1D" : timeframe.period
+    string oiTickerID     = str.format("{0}_OI", ticker.standard(symbol))
+    [oi, oiRising] = switch
+        repaint or timeframe.isdwm => request.security(oiTickerID, timeframe, [close, close > close[1]], gapStrategy)
+        => request.security(oiTickerID, timeframe, [close[1], close[1] > close[2]], gapStrategy, barmerge.lookahead_on)
+    
+
+// @function                (Overload 1 of 2) Requests opening, high, low, and closing open interest (OI) data and OI 
+//                          rising information for a valid cryptocurrency contract on a specified timeframe.
+//                          Calls to this function count toward a script's `request.*()` call limit.
+// @param symbol            (simple string) The symbol for which to request open interest data. 
+// @param timeframe         (simple string) The timeframe of the data request. If the timeframe is lower 
+//                          than the chart's timeframe, it causes a runtime error. 
+// @param gaps              (simple bool) Optional. If `true`, the function returns non-na values only when new values 
+//                          are available from the requested context. If `false`, the function returns the latest 
+//                          retrieved values when new data is unavailable. The default is `false`.
+// @param repaint           (simple bool) Optional. If `true` and the `timeframe` represents a higher timeframe, the 
+//                          function returns unconfirmed values from the timeframe on realtime bars, which repaint when 
+//                          the script restarts its executions. If `false`, it returns only confirmed higher-timeframe 
+//                          values to avoid repainting. The default is `true`. 
+// @returns                 ([float, float, float, float, bool]) A tuple containing the following values:
+//                          - The opening, high, low, and closing OI values for the symbol, respectively.
+//                          - `true` if the closing OI is above the previous period's value, `false` otherwise. 
+export openInterestCrypto(
+     simple string symbol, simple string timeframe, simple bool gaps = false, simple bool repaint = true
+ ) =>
+    var int tfDiff = timeframe.in_seconds(timeframe) - timeframe.in_seconds()
+    if tfDiff < 0
+        runtime.error("The requested timeframe must be greater than or equal to the chart's timeframe.")
+    var gapStrategy       = gaps ? barmerge.gaps_on : barmerge.gaps_off
+    var string oiTickerID = str.format("{0}_OI", ticker.standard(symbol))
+    [oiOpen, oiHigh, oiLow, oiClose, oiRising] = switch
+        repaint or tfDiff == 0 => request.security(
+             oiTickerID, timeframe, [open, high, low, close, close > close[1]], gapStrategy
+         )
+        => request.security(
+             oiTickerID, timeframe, [open[1], high[1], low[1], close[1], close[1] > close[2]], gapStrategy, 
+             barmerge.lookahead_on
+         )
+
+        
+// @function                (Overload 2 of 2) Requests opening, high, low, and closing open interest (OI) data and OI 
+//                          rising information for a valid cryptocurrency contract on a specified timeframe.
+//                          Calls to this function count toward a script's `request.*()` call limit.
+// @param symbol            (series string) The symbol for which to request open interest data. 
+// @param timeframe         (series string) The timeframe of the data request. If the timeframe is lower 
+//                          than the chart's timeframe, it causes a runtime error. 
+// @param gaps              (simple bool) Optional. If `true`, the function returns non-na values only when new values 
+//                          are available from the requested context. If `false`, the function returns the latest 
+//                          retrieved values when new data is unavailable. The default is `false`.
+// @param repaint           (simple bool) Optional. If `true` and the `timeframe` represents a higher timeframe, the 
+//                          function returns unconfirmed values from the timeframe on realtime bars, which repaint when 
+//                          the script restarts its executions. If `false`, it returns only confirmed higher-timeframe 
+//                          values to avoid repainting. The default is `true`. 
+// @returns                 ([float, float, float, float, bool]) A tuple containing the following values:
+//                          - The opening, high, low, and closing OI values for the symbol, respectively.
+//                          - `true` if the closing OI is above the previous period's value, `false` otherwise. 
+export openInterestCrypto(
+     series string symbol, series string timeframe, simple bool gaps = false, simple bool repaint = true
+ ) =>
+    int tfDiff = timeframe.in_seconds(timeframe) - timeframe.in_seconds()
+    if tfDiff < 0
+        runtime.error("The requested timeframe must be greater than or equal to the chart's timeframe.")
+    var gapStrategy   = gaps ? barmerge.gaps_on : barmerge.gaps_off
+    string oiTickerID = str.format("{0}_OI", ticker.standard(symbol))
+    [oiOpen, oiHigh, oiLow, oiClose, oiRising] = switch
+        repaint or tfDiff == 0 => request.security(
+             oiTickerID, timeframe, [open, high, low, close, close > close[1]], gapStrategy
+         )
+        => request.security(
+             oiTickerID, timeframe, [open[1], high[1], low[1], close[1], close[1] > close[2]], gapStrategy, 
+             barmerge.lookahead_on
+         )
+
+
+// @function                (Overload 1 of 2) Requests Commitment of Traders (COT) data with specified parameters.
+//                          This function provides a simplified way to access CFTC COT data available on TradingView.
+//                          Calls to this function count toward a script's `request.*()` call limit.
+//                          For more advanced tools and detailed information about COT data, see TradingView's 
+//                          [LibraryCOT](https://www.tradingview.com/script/ysFf2OTq-LibraryCOT/) library.
+// @param metricName        (simple string) One of the valid metric names listed in the library's documentation and 
+//                          source code.
+// @param metricDirection   (simple string) Metric direction. Possible values are: "Long", "Short", "Spreading", and 
+//                          "No direction". Consult the library's documentation or code to see which direction values 
+//                          apply to the specified metric.
+// @param includeOptions    (simple bool) If `true`, the COT symbol includes options information. Otherwise, it does not. 
+// @param CFTCCode          (simple string) Optional. The CFTC code for the asset. For example, wheat futures 
+//                          (root "ZW") have the code "001602". If one is not specified, the function will attempt to 
+//                          get a valid code for the chart symbol's root, base currency, or main currency.  
+// @param typeCOT           (simple string) Optional. The type of report to request. Possible values are: 
+//                          "Legacy", "Disaggregated", "Financial". The default is "Legacy". 
+// @param mode              (simple string) Optional. Specifies the information the function extracts from a symbol. 
+//                          Possible modes are:
+//                           - "Root":
+//                              The function extracts the futures symbol's root prefix information 
+//                              (e.g., "ES" for "ESH2020").
+//                           - "Base currency":
+//                              The function extracts the first currency from a currency pair 
+//                              (e.g., "EUR" for "EURUSD").
+//                           - "Currency":
+//                              The function extracts the currency of the symbol's quoted values 
+//                              (e.g., "JPY" for "TSE:9984" or "USDJPY").
+//                           - "Auto":
+//                              The function tries the first three modes (Root -> Base currency -> Currency) until 
+//                              it finds a match. 
+//
+//                          The default is "Auto".
+//
+//                          If the specified mode is not available for the symbol, it causes a runtime error. 
+// @param metricType        (series string) Optional. The metric type. Possible values are: "All", "Old", "Other". The 
+//                          default is "All". 
+// @returns                 (float) The specified Commitment of Traders data series. If no data is available, it 
+//                          causes a runtime error. 
+export commitmentOfTraders(
+     simple string metricName, simple string metricDirection, simple bool includeOptions, simple string CFTCCode = "", 
+     simple string typeCOT = "Legacy", simple string mode = "Auto", simple string metricType = "All"
+ ) => 
+    var string cftcCode = CFTCCode != "" ? CFTCCode : TVcot.convertRootToCOTCode(mode)
+    float cotSeries     = TVcot.requestCommitmentOfTraders(
+         typeCOT, cftcCode, includeOptions, metricName, metricDirection, metricType
+     )
+
+
+// @function                (Overload 2 of 2) Requests Commitment of Traders (COT) data with specified parameters.
+//                          This function provides a simplified way to access CFTC COT data available on TradingView.
+//                          Calls to this function count toward a script's `request.*()` call limit.
+//                          For more advanced tools and detailed information about COT data, see TradingView's 
+//                          [LibraryCOT](https://www.tradingview.com/script/ysFf2OTq-LibraryCOT/) library.
+// @param metricName        (series string) One of the valid metric names listed in the library's documentation and 
+//                          source code.
+// @param metricDirection   (series string) Metric direction. Possible values are: "Long", "Short", "Spreading", and 
+//                          "No direction". Consult the library's documentation or code to see which direction values 
+//                          apply to the specified metric.
+// @param includeOptions    (series bool) If `true`, the COT symbol includes options information. Otherwise, it does not. 
+// @param CFTCCode          (series string) Optional. The CFTC code for the asset. For example, wheat futures 
+//                          (root "ZW") have the code "001602". If one is not specified, the function will attempt to 
+//                          get a valid code for the chart symbol's root, base currency, or main currency.  
+// @param typeCOT           (series string) Optional. The type of report to request. Possible values are: 
+//                          "Legacy", "Disaggregated", "Financial". The default is "Legacy". 
+// @param mode              (series string) Optional. Specifies the information the function extracts from a symbol. 
+//                          Possible modes are:
+//                           - "Root":
+//                              The function extracts the futures symbol's root prefix information 
+//                              (e.g., "ES" for "ESH2020").
+//                           - "Base currency":
+//                              The function extracts the first currency from a currency pair 
+//                              (e.g., "EUR" for "EURUSD").
+//                           - "Currency":
+//                              The function extracts the currency of the symbol's quoted values 
+//                              (e.g., "JPY" for "TSE:9984" or "USDJPY").
+//                           - "Auto":
+//                              The function tries the first three modes (Root -> Base currency -> Currency) until 
+//                              it finds a match. 
+//
+//                          The default is "Auto".
+//
+//                          If the specified mode is not available for the symbol, it causes a runtime error. 
+// @param metricType        (series string) Optional. The metric type. Possible values are: "All", "Old", "Other". The 
+//                          default is "All". 
+// @returns                 (float) The specified Commitment of Traders data series. If no data is available, it 
+//                          causes a runtime error. 
+export commitmentOfTraders(
+     series string metricName, series string metricDirection, series bool includeOptions, series string CFTCCode = "", 
+     series string typeCOT = "Legacy", series string mode = "Auto", series string metricType = "All"
+ ) => 
+    string cftcCode  = CFTCCode != "" ? CFTCCode : TVcot.convertRootToCOTCode(mode)
+    float  cotSeries = TVcot.requestCommitmentOfTraders(
+         typeCOT, cftcCode, includeOptions, metricName, metricDirection, metricType
+     )
+//#endregion
+
+
+
+//#region ———————————————————— Example Code
+
+
+// Constants
+string ST01 = "COT"
+string ST02 = "FRED"
+string ST03 = "FINRA Short Sale Volume"
+string ST04 = "Open Interest (OI)"
+
+string MN01 = "Open Interest"
+string MN02 = "Noncommercial Positions"
+string MN03 = "Commercial Positions"
+string MN04 = "Total Reportable Positions"
+string MN05 = "Nonreportable Positions"
+string MN06 = "Traders Total"
+string MN07 = "Traders Noncommercial"
+string MN08 = "Traders Commercial"
+string MN09 = "Traders Total Reportable"
+string MN10 = "Concentration Gross LT 4 TDR"
+string MN11 = "Concentration Gross LT 8 TDR"
+string MN12 = "Concentration Net LT 4 TDR"
+string MN13 = "Concentration Net LT 8 TDR"
+
+// Inputs 
+string seriesTypeInput      = input.string(ST02,           "Series type",   options = [ST01, ST02, ST03, ST04])
+string GRP1                 = "FRED"
+string fredCodeInput        = input.string("GDP",          "Series code", group = GRP1)
+string GRP2                 = "COT"
+string metricNameInput      = input.string(MN01,           "Legacy metric",  options = [MN01, MN02, MN03, MN04, MN05, MN06, MN07, MN08, MN09, MN10, MN11, MN12, MN13], group = GRP2)
+string metricDirectionInput = input.string("No direction", "  Direction",    options = ["No direction", "Long", "Short", "Spreading"], group = GRP2)
+string userCFTCCodeInput    = input.string("",             "  CFTC code",    group   = GRP2)
+
+// @variable The requested data based on the series type ("COT", "FRED", "FINRA Short Sale Volume", or "Open Interest").
+float plotSeries = switch seriesTypeInput
+    ST01 => commitmentOfTraders(metricNameInput, metricDirectionInput, false, userCFTCCodeInput)
+    ST02 => fred(fredCodeInput)
+    ST03 => finraShortSaleVolume(syminfo.tickerid)
+    ST04 =>
+        switch syminfo.type
+            "futures" =>
+                [oi, _] = openInterestFutures(syminfo.tickerid)
+                oi
+            "crypto"  =>
+                [_, _, _, oiClose, _] = openInterestCrypto(syminfo.tickerid, timeframe.period)
+                oiClose
+            => runtime.error(
+                 str.format(
+                     "No open interest data available for the {1}{0}{1} symbol.", ticker.standard(syminfo.tickerid), "'"
+                 )
+             ), na
+
+// Plot the requested data as a step-line with diamond markers in a separate pane.
+plot(plotSeries, "Requested data", color.fuchsia, style = plot.style_stepline_diamond)
+// //#endregion
+

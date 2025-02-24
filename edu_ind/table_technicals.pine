@@ -1,0 +1,194 @@
+//@version=6
+indicator(title="Technical Ratings", shorttitle="Technicals", precision=2)
+res = input.timeframe("", title="Indicator Timeframe")
+ratingSignal = input.string(defval = "All", title = "Rating is based on", options = ["MAs", "Oscillators", "All"])
+
+useMtf1 = input(false, "", inline="mtf1", group="Show MTF")
+mtf1 = input.timeframe("60", "", inline="mtf1", group="Show MTF")
+useMtf2 = input(false, "", inline="mtf2", group="Show MTF")
+mtf2 = input.timeframe("240", "", inline="mtf2", group="Show MTF")
+useMtf3 = input(true, "", inline="mtf3", group="Show MTF")
+mtf3 = input.timeframe("1D", "", inline="mtf3", group="Show MTF")
+useMtf4 = input(true, "", inline="mtf4", group="Show MTF")
+mtf4 = input.timeframe("1W", "", inline="mtf4", group="Show MTF")
+useMtf5 = input(true, "", inline="mtf5", group="Show MTF")
+mtf5 = input.timeframe("1M", "", inline="mtf5", group="Show MTF")
+
+colBuy = input(#5b9cf6, "Buy       ", group="Color Settings", inline="Buy Colors")
+colStrongBuy = input(#2962ff, "", group="Color Settings", inline="Buy Colors")
+colNeutral = input(#a8adbc, "Neutral ", group="Color Settings", inline="Neutral")
+colSell = input(#ef9a9a, "Sell     ", group="Color Settings", inline="Sell Colors")
+colStrongSell = input(#f44336, "",  group="Color Settings", inline="Sell Colors")
+tableTitleColor = input(#295b79, "Headers", group="Color Settings", inline="Headers")
+
+import TradingView/TechnicalRating/3 as rating
+
+StrongBound = 0.5
+WeakBound = 0.1
+
+getSignal(ratingTotal, ratingOther, ratingMA) =>
+    if ratingSignal == "MAs"
+        ratingMA
+    else if ratingSignal == "Oscillators"
+        ratingOther
+    else
+    	ratingTotal
+
+[ratingTotalCurrent, ratingOtherCurrent, ratingMACurrent]  = request.security(syminfo.tickerid, res, rating.calcRatingAll())
+[ratingTotal_mtf1,   ratingOther_mtf1,   ratingMA_mtf1]    = request.security(syminfo.tickerid, mtf1, rating.calcRatingAll())
+[ratingTotal_mtf2,   ratingOther_mtf2,   ratingMA_mtf2]    = request.security(syminfo.tickerid, mtf2, rating.calcRatingAll())
+[ratingTotal_mtf3,   ratingOther_mtf3,   ratingMA_mtf3]    = request.security(syminfo.tickerid, mtf3, rating.calcRatingAll())
+[ratingTotal_mtf4,   ratingOther_mtf4,   ratingMA_mtf4]    = request.security(syminfo.tickerid, mtf4, rating.calcRatingAll())
+[ratingTotal_mtf5,   ratingOther_mtf5,   ratingMA_mtf5]    = request.security(syminfo.tickerid, mtf5, rating.calcRatingAll())
+
+tradeSignal = getSignal(ratingTotalCurrent, ratingOtherCurrent, ratingMACurrent)
+
+calcRatingStatus(value) =>
+    if na(value)
+        "-"
+    else if -StrongBound > value
+        "Strong\nSell"
+    else if value < -WeakBound
+        "Sell   "
+    else if value > StrongBound
+        "Strong\nBuy "
+    else if value > WeakBound
+        "Buy    "
+    else
+        "Neutral"
+
+allRatingsArray = array.from("All", calcRatingStatus(ratingTotalCurrent), calcRatingStatus(ratingTotal_mtf1), calcRatingStatus(ratingTotal_mtf2),
+                  calcRatingStatus(ratingTotal_mtf3), calcRatingStatus(ratingTotal_mtf4), calcRatingStatus(ratingTotal_mtf5))
+
+oscRatingsArray = array.from("Osc", calcRatingStatus(ratingOtherCurrent), calcRatingStatus(ratingOther_mtf1), calcRatingStatus(ratingOther_mtf2),
+                  calcRatingStatus(ratingOther_mtf3), calcRatingStatus(ratingOther_mtf4), calcRatingStatus(ratingOther_mtf5))
+
+maRatingsArray = array.from("MAs", calcRatingStatus(ratingMACurrent), calcRatingStatus(ratingMA_mtf1), calcRatingStatus(ratingMA_mtf2),
+                 calcRatingStatus(ratingMA_mtf3), calcRatingStatus(ratingMA_mtf4), calcRatingStatus(ratingMA_mtf5))
+
+currentRes = res==""?timeframe.period=="D"?"1D":
+					 timeframe.period=="W"?"1W":
+					 timeframe.period=="M"?"1M":
+					 timeframe.period:res
+allResArray = array.from("TF", currentRes, mtf1, mtf2, mtf3, mtf4, mtf5)
+usedMtfArray = array.from(true, true, useMtf1, useMtf2, useMtf3, useMtf4, useMtf5)
+
+removeUnused(duplicatedIndex) =>
+    if array.size(duplicatedIndex) > 0
+        for j=0 to array.size(duplicatedIndex)-1
+            int currentDupIndex  = array.shift(duplicatedIndex)
+            array.remove(allResArray,     currentDupIndex-j)
+            array.remove(usedMtfArray,    currentDupIndex-j)
+            array.remove(allRatingsArray, currentDupIndex-j)
+            array.remove(oscRatingsArray, currentDupIndex-j)
+            array.remove(maRatingsArray,  currentDupIndex-j)
+
+eraseDuplicatedAndDisabledTf() =>
+    int[] duplicatedIndex = array.new_int()
+    for m=1 to array.size(allResArray)-1
+        bool isCurrentMtfDisabled = array.get(usedMtfArray, m) == false
+        if isCurrentMtfDisabled
+            array.push(duplicatedIndex, m)
+    removeUnused(duplicatedIndex)
+
+    for m=1 to array.size(allResArray)-1
+        int firstSearchElemIndex = array.indexof(allResArray, array.get(allResArray, m))
+        int lastSearchElemIndex = array.lastindexof(allResArray, array.get(allResArray, m))
+        if firstSearchElemIndex == lastSearchElemIndex or array.indexof(duplicatedIndex, lastSearchElemIndex) != -1
+            continue
+        string searchElem = array.get(allResArray, firstSearchElemIndex)
+        for i=firstSearchElemIndex+1 to lastSearchElemIndex
+            string currentElem = array.get(allResArray, i)
+            if searchElem == currentElem
+                array.push(duplicatedIndex, i)
+    removeUnused(duplicatedIndex)
+
+poscond = tradeSignal > WeakBound
+negcond = tradeSignal < -WeakBound
+posseries = poscond ? tradeSignal : 0
+negseries = negcond ? tradeSignal : 0
+count_rising(plot) =>
+    v_plot = plot > 0 ? plot : -plot
+    var count = 0
+    if v_plot == 0
+        count := 0
+    else if v_plot >= v_plot[1]
+        count := math.min(5, count + 1)
+    else if v_plot < v_plot[1]
+        count := math.max(1, count - 1)
+    count
+poscount = count_rising(posseries)
+negcount = count_rising(negseries)
+_pc = poscond ? poscount : negcond ? negcount : 0
+
+colorTransp(col, transp) =>
+    red = color.r(col)
+    green = color.g(col)
+    blue = color.b(col)
+    color.rgb(red, green, blue, transp)
+
+hline(1, color=colorTransp(colBuy, 50), linestyle=hline.style_solid)
+hline(0.5, color=colorTransp(colBuy, 50), linestyle=hline.style_dashed)
+hline(-1, color=colorTransp(colSell, 50), linestyle=hline.style_solid)
+hline(-0.5, color=colorTransp(colSell, 50), linestyle=hline.style_dashed)
+
+f_cellBgColor(_signal) =>
+    _returnColor = tableTitleColor
+    if _signal == "Sell   "
+        _returnColor := colSell
+    else if _signal == "Strong\nSell"
+        _returnColor := colStrongSell
+    else if _signal == "Buy    "
+        _returnColor := colBuy
+    else if _signal == "Strong\nBuy "
+        _returnColor := colStrongBuy
+    else if _signal == "Neutral" or _signal == "-"
+        _returnColor := colNeutral
+    _returnColor
+
+f_cellAlign(_cellTitle) =>
+    _align = text.align_left
+    if _cellTitle == "MAs" or _cellTitle == "Osc" or _cellTitle == "All" or _cellTitle == "-"
+        _align := text.align_center
+    _align
+
+f_addCell(_table, _column, _row, _cellTitle) =>
+    table.cell(_table, _column, _row, _cellTitle, text_color=color.white, text_halign=f_cellAlign(_cellTitle), bgcolor=f_cellBgColor(_cellTitle), text_size=size.small)
+
+f_drawInfo() =>
+    var t1 = table.new(position.middle_right, 4, array.size(allRatingsArray), frame_width=2, frame_color=color.white, border_width=1, border_color=color.white)
+    eraseDuplicatedAndDisabledTf()
+    timeframesCount = array.size(allResArray)
+    if timeframesCount < 3
+        for i=0 to timeframesCount-1
+            f_addCell(t1, i, 1, array.get(maRatingsArray, i))
+            f_addCell(t1, i, 2, array.get(oscRatingsArray, i))
+            f_addCell(t1, i, 3, array.get(allRatingsArray, i))
+    else
+        for i=0 to timeframesCount-1
+            f_addCell(t1, 0, i, array.get(allResArray, i))
+            if ratingSignal == "All"
+                f_addCell(t1, 1, i, array.get(maRatingsArray, i))
+                f_addCell(t1, 2, i, array.get(oscRatingsArray, i))
+                f_addCell(t1, 3, i, array.get(allRatingsArray, i))
+            if ratingSignal == "Oscillators"
+                f_addCell(t1, 1, i, array.get(oscRatingsArray, i))
+            if ratingSignal == "MAs"
+                f_addCell(t1, 1, i, array.get(maRatingsArray, i))
+
+col_buy = color.from_gradient(tradeSignal, 0.0, 0.2, colNeutral, colStrongBuy)
+col_sell = color.from_gradient(tradeSignal, -0.2, 0.0, colStrongSell, colNeutral)
+col_gradient = color.from_gradient(tradeSignal, -0.2, 0.2, col_sell, col_buy)
+
+if barstate.islast
+    f_drawInfo()
+
+plot(tradeSignal, title="Rating", linewidth = 1, style = plot.style_columns, color = color.new(col_gradient, 50 - _pc * 10))
+_cond1 = ta.crossunder(tradeSignal, -WeakBound)
+alertcondition(_cond1, "Sell", "Ratings changed to Sell")
+_cond2 = ta.crossover(tradeSignal, WeakBound)
+alertcondition(_cond2, "Buy", "Ratings changed to Buy")
+_cond3 = ta.crossunder(tradeSignal, -StrongBound)
+alertcondition(_cond3, "Strong Sell", "Ratings changed to Strong Sell")
+_cond4 = ta.crossover(tradeSignal, StrongBound)
+alertcondition(_cond4, "Strong Buy", "Ratings changed to Strong Buy")

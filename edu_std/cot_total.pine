@@ -1,0 +1,139 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © TradingView
+
+//@version=6
+indicator("Commitment of Traders: Total", "COT Total", format = format.volume)
+
+// Commitment of Traders: Total
+// v4, 2024.11.26
+
+// This code was written using the recommendations from the Pine Script™ User Manual's Style guide:
+//    https://www.tradingview.com/pine-script-docs/writing/style-guide/
+
+
+
+import TradingView/LibraryCOT/4 as cot
+
+
+
+//#region ———————————————————— Constants and inputs
+
+
+
+// Metric information types 
+string IO01 = "Futures"
+string IO02 = "Options"
+string IO03 = "Futures + Options"
+
+// Directions
+string ST01 = "Long"
+string ST02 = "Short"
+string ST03 = "Long + Short"
+string ST04 = "Long - Short"
+string ST05 = "Long %"
+
+// Tooltips
+string TT_MODE = "Determines the type of information the indicator uses from the chart's symbol to request COT data:\n
+     • 'Root' uses the root prefix of a futures symbol (e.g., 'ES' for 'ESH2020').\n
+     • 'Base currency' uses the first currency from a currency pair (e.g., 'EUR' for 'EURUSD').\n
+     • 'Currency' uses the currency of the symbol's quoted values (e.g., 'JPY' for 'TSE:9984' or 'USDJPY').\n
+     • 'Auto' tries all the above modes in order.\n
+     If no COT data is available for the specified mode, a runtime error occurs." 
+string TT_OPTIONS = "Determines whether the data includes information from futures, options, or both."
+string TT_DISPLAY = "Determines the information the indicator displays on the chart:\n
+     • 'Long' shows the total of long positions.\n
+	 • 'Short' shows the total of short positions.\n
+	 • 'Long + Short' shows the sum of long and short positions.\n
+	 • 'Long - Short' shows the difference between long and short positions.\n
+	 • 'Long %' shows the percentage of long positions relative to the sum of long and short positions."
+string TT_OVERRIDE = "This field allows manual specification of the CFTC COT code. When the field is not empty, the
+     indicator uses this code instead of determining the code based on the chart symbol's root or currency information.
+     For example, if the field's value is '001602', the indicator requests wheat futures data, regardless of the
+     current chart."
+
+// Inputs
+string selectionModeInput  = input.string("Auto", "COT selection mode", options = ["Auto", "Root", "Base currency", "Currency"], tooltip = TT_MODE)
+string includeOptionsInput = input.string(IO01,   "Futures/Options",    options = [IO01, IO02, IO03], tooltip = TT_OPTIONS)
+string selectedTypeInput   = input.string(ST01,   "Display",            options = [ST01, ST02, ST03, ST04, ST05], tooltip = TT_DISPLAY)
+string userCFTCCodeInput   = input.string("",     "CFTC Code",          tooltip = TT_OVERRIDE)
+//#endregion
+
+
+
+//#region ———————————————————— Functions
+
+
+// @function                Requests Legacy CFTC Commitment of Traders (COT) data based on the specified parameters.
+// @param CFTCCode          (string) The CFTC code for the asset. For example, wheat futures (root "ZW") have the 
+//                          code "001602".
+// @param metricName        (string) The name of the Legacy metric to request, corresponding to one of the identifiers 
+//                          listed in the "LibraryCOT" library (e.g., "Commercial Positions").
+// @param isLong            (bool) If `true`, the function requests data for long positions. Otherwise, it requests 
+//                          data for short positions.
+// @returns                 (float) The retrieved COT Legacy metric for futures, options, or futures and options, 
+//                          depending on the specified "Futures/Options" input value.
+dataRequest(cftcCode, metricName, isLong) =>
+	string direction = isLong ? "Long" : "Short"
+	string typeCOT = "Legacy"
+	float futuresOnly        = cot.requestCommitmentOfTraders(typeCOT, cftcCode, false, metricName, direction, "All")
+	float futuresWithOptions = cot.requestCommitmentOfTraders(typeCOT, cftcCode, true,  metricName, direction, "All") 
+    switch includeOptionsInput
+    	IO01 => futuresOnly
+    	IO02 => futuresWithOptions - futuresOnly
+    	IO03 => futuresWithOptions
+    	=> na
+
+
+// @function 				Retrieves long and short Legacy COT metrics based on the specified CFTC code and metric 
+//                          name. The function calculates a final metric based on the selected "Display" option. 
+// @param CFTCCode          (string) The CFTC code for the asset. For example, wheat futures (root "ZW") have the 
+//                          code "001602".
+// @param metricName        (string) The name of the Legacy metric to request, corresponding to one of the identifiers 
+//                          listed in the "LibraryCOT" library (e.g., "Commercial Positions").
+// @returns                 (float) The calculated COT metric based on the "Display" input value:
+//                              - If "Long", returns the total of long positions.
+//                              - If "Short", returns the total of short positions.
+//                              - If "Long + Short", returns the sum of long and short positions.
+//                              - If "Long - Short", returns the difference between long and short positions.
+//                              - If "Long %", returns the percentage of long positions relative to the sum of 
+//                              long and short positions.
+metric(cftcCode, metricName) =>
+	float cotLong  = dataRequest(cftcCode, metricName, true)
+	float cotShort = dataRequest(cftcCode, metricName, false)
+	switch selectedTypeInput
+		ST01 => cotLong
+		ST02 => cotShort
+		ST03 => cotLong + cotShort
+		ST04 => cotLong - cotShort
+		ST05 => cotLong / (cotLong + cotShort) * 100
+		=> na
+//#endregion
+
+
+
+//#region ———————————————————— Calculations and display
+
+
+// @variable The user-specified CFTC code if the "CFTC Code" input is not empty, a chart-based CFTC code otherwise. 
+var string cftcCode = userCFTCCodeInput != "" ? userCFTCCodeInput : cot.convertRootToCOTCode(selectionModeInput)
+
+// Request COT data for noncommercial, nonreportable, and commercial positions. 
+float largeTraders      = metric(cftcCode, "Noncommercial Positions")
+float smallTraders      = metric(cftcCode, "Nonreportable Positions")
+float commercialHedgers = metric(cftcCode, "Commercial Positions")
+
+// Plot the requested data as step lines with diamonds.
+plot(largeTraders,      "Large Traders",      color.red,   style = plot.style_stepline_diamond)
+plot(smallTraders,      "Small Traders",      color.blue,  style = plot.style_stepline_diamond)
+plot(commercialHedgers, "Commercial Hedgers", color.green, style = plot.style_stepline_diamond)
+
+// @variable A `table` displaying symbol and CFTC code information in the bottom-right corner. 
+var table symbolDisplay = table.new(position.bottom_right, 1, 1)
+// Populate the `symbolDisplay` on the first bar. 
+if barstate.isfirst
+    color  TEXT_COLOR = color.white
+    color  BG_COLOR   = color.new(color.blue, 50)
+    string dataCOT    = userCFTCCodeInput != "" ? userCFTCCodeInput : cot.convertRootToCOTCode(selectionModeInput, false)
+    string txt        = str.format("COT data for {0} {1}\nCFTC Code: {2}", dataCOT, includeOptionsInput, cftcCode)
+    table.cell(symbolDisplay, 0, 0, txt, text_halign = text.align_left, text_color = TEXT_COLOR, bgcolor = BG_COLOR)
+//#endregion

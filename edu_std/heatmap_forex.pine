@@ -1,0 +1,247 @@
+// This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © TradingView
+
+//@version=6
+indicator("Forex Heatmap")
+
+// Forex Heatmap
+// v2, 2024.11.26
+
+// This code was written using the recommendations from the Pine Script™ User Manual's Style guide:
+//    https://www.tradingview.com/pine-script-docs/writing/style-guide/
+
+
+
+//#region ———————————————————— Constants and inputs
+
+
+// Constants
+string MI01  = "Cross rates"
+string MI02  = "Heat map"
+
+// Tooltips
+TT_MI = "The table's display mode. Options are:\n\n
+     - Cross rates: Displays the exchange rates between currencies with cell colors indicating the direction of rate
+     changes (green for increases, red for decreases).\n\n
+     - Heat map: Shows the daily percentage change of each currency pair with cell colors indicating the magnitude and
+     direction of changes (green for gains, reds for losses)."
+TT_SL = "The list of currency codes to include. The list must be comma-separated and can include 
+     optional spaces (e.g., 'EUR, USD, AUD, GBP'). The indicator requests cross rates and percentage changes for each
+     currency pair combination."
+TT_LT = "The color scheme for light themes. The inputs determine the following, in order:\n\n
+     - Neutral color\n
+     - Positive cell color\n
+     - Minor negative cell color (for 'Heat map' only)\n
+     - Negative cell color\n
+     - Border color\n
+     - Text color"
+TT_DT = "The color scheme for dark themes. The inputs determine the following, in order:\n\n
+     - Neutral color\n
+     - Positive cell color\n
+     - Minor negative cell color (for 'Heat map' only)\n
+     - Negative cell color\n
+     - Border color\n
+     - Text color"
+
+// Inputs
+string modeInput       = input.string(MI01, "Display mode", options = [MI01, MI02], tooltip = TT_MI)
+string symbolListInput = input.text_area("EUR, USD, AUD, GBP", "Currency list", tooltip = TT_SL)
+
+string GRP1 = "Colors"
+color neutralLightInput = input.color(#f8f9fd, "Light", inline = "01", group = GRP1)
+color posLightInput     = input.color(#daf2e6, "",      inline = "01", group = GRP1)
+color negLight1Input    = input.color(#ffebec, "",      inline = "01", group = GRP1)
+color negLight2Input    = input.color(#fccbcd, "",      inline = "01", group = GRP1)
+color borderLightInput  = input.color(#e0e3eb, "",      inline = "01", group = GRP1)
+color textLightInput    = input.color(#131722, "",      inline = "01", group = GRP1, tooltip = TT_LT)
+color neutralDarkInput  = input.color(#1e222d,"Dark",   inline = "02", group = GRP1)
+color posDarkInput      = input.color(#1a3326, "",      inline = "02", group = GRP1)
+color negDark1Input     = input.color(#801922, "",      inline = "02", group = GRP1)
+color negDark2Input     = input.color(#b22833, "",      inline = "02", group = GRP1)
+color borderDarkInput   = input.color(#434651, "",      inline = "02", group = GRP1)
+color textDarkInput     = input.color(#d1d4dc, "",      inline = "02", group = GRP1, tooltip = TT_DT)
+//#endregion
+
+
+
+//#region ———————————————————— Functions and UDTs
+
+
+// @type                    A custom type that holds relevant currency pair data for realtime display updates.
+// @field price             (float) The current price of the currency pair.
+// @field prevPrice         (float) The previous price of the currency pair.
+// @field tickSize          (float) The minimum price increment (tick size) of the currency pair.
+// @field dailyChange       (float) The daily percentage change of the currency pair.
+// @field lastUpdateTime    (int) The UNIX timestamp of the last realtime update.
+type dataUpdate
+    float price 
+    float prevPrice
+    float tickSize
+    float dailyChange 
+    int   lastUpdateTime = timenow
+
+
+// @function                Removes extra whitespaces and commas from a "string" symbol list, and then splits the 
+//                          cleaned list by commas to create an array. 
+// @param symbolList        (string) The comma-separated "string" list to process. 
+// @returns                 (array<string>) An array containing each symbol name in the `symbolList`. 
+processSymbolList(string symbolList) =>
+    string cleaned = str.replace_all(str.replace_all(symbolList, " ", ""), ",,", ",")
+    if str.endswith(cleaned, ",")
+        cleaned := str.substring(cleaned, 0, str.length(cleaned) - 1)
+    if str.startswith(cleaned, ",")
+        cleaned := str.substring(cleaned, 1, str.length(cleaned))
+    array<string> result = str.split(cleaned, ",")
+
+
+// @function                Retrieves the close price, daily percentage change, and minimum tick size for the `pairName` 
+//                          currency pair.
+// @param pairName          (string) The symbol name of the currency pair to request data for.
+// @returns                 ([float, float, float]) A tuple containing the following currency pair information:
+//                           - The latest `close` price.
+//                           - The daily percentage change.
+//                           - The minimum tick size.
+getPairData(string pairName) =>
+    [pairRate, dailyChg, mintick] = request.security(
+         pairName, "1D", [close, 100 * (close - close[1]) / close[1], syminfo.mintick],
+         calc_bars_count       = 10,
+         ignore_invalid_symbol = true,
+         lookahead             = barmerge.lookahead_on
+     )
+    [pairRate, dailyChg, mintick]
+
+
+// @function                Updates a matrix of `dataUpdate` objects with new data for a specific currency pair. 
+//                          Callable as a method or a function.
+// @param m                 (matrix<dataUpdate>) The matrix to update.
+// @param price             (float) The current price of the currency pair.
+// @param prevPrice         (float) The previous price of the currency pair.
+// @param mintick           (float) The minimum tick size of the currency pair.
+// @param change            (float) The daily percentage change of the currency pair.
+// @param row               (int) The row index in the matrix corresponding to the first currency.
+// @param col               (int) The column index in the matrix corresponding to the second currency.
+// @returns                 (void) The function does not return a usable value. 
+method updateMatrix(matrix<dataUpdate> m, float price, float prevPrice, float mintick, float change, int row, int col) =>
+    dataUpdate currValue = m.get(row, col)
+    if na(currValue)
+        m.set(row, col, dataUpdate.new(price, na, mintick, change))
+    else if price != currValue.price
+        m.set(row, col, dataUpdate.new(price, currValue.price, mintick, change))
+
+
+// @function                Creates a formatting string for displaying price values based on a pair's minimum tick size.
+// @param mintick           (float) The minimum tick size of a symbol. 
+// @returns                 (string) A formatting string suitable for corresponding price values, e.g., "0.000"
+tickFormat(float mintick) =>
+    string str = str.tostring(mintick)
+    str := str.replace_all(str, "25", "00")
+    str := str.replace_all(str, "5",  "0")
+    str := str.replace_all(str, "1",  "0")
+    string result = na(mintick) ? "#.##########" : str
+
+
+// @function                Determines whether a specified background color represents a light or dark theme based on 
+//                          its relative luminance.
+// @param bgColor           (color) Optional. The background color to analyze. The default is `chart.bg_color`.
+// @returns                 (bool) `true` if the `col` color has a relative luminance above 0.229129, indicating 
+//                          heavier contrast with black than white, `false` otherwise. 
+isLightTheme(color bgColor = chart.bg_color) =>
+    float r = color.r(bgColor) / 255.0
+    float g = color.g(bgColor) / 255.0
+    float b = color.b(bgColor) / 255.0
+    r := r <= 0.03928 ? r / 12.92 : math.pow((r + 0.055) / 1.055, 2.4)
+    g := g <= 0.03928 ? g / 12.92 : math.pow((g + 0.055) / 1.055, 2.4)
+    b := b <= 0.03928 ? b / 12.92 : math.pow((b + 0.055) / 1.055, 2.4)
+    bool result = 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.229129
+//#endregion
+
+
+
+//#region ———————————————————— Calculations and display
+
+
+// @variable The resulting array after removing extra spaces and commas from the symbol list and splitting by commas.
+var array<string> symbolArray = processSymbolList(symbolListInput)
+// @variable The number of symbols listed in the `symbolListInput`.
+var int symbolNum = symbolArray.size()
+// @variable Is `true` if the chart's background color has a higher contrast with black than white, `false` otherwise.
+var bool isLightTheme = isLightTheme()
+// On the first bar, set the table colors based on whether the chart theme is light or dark.
+var color neutralColor       = isLightTheme ? neutralLightInput : neutralDarkInput
+var color positiveColor      = isLightTheme ? posLightInput     : posDarkInput
+var color negativelightColor = isLightTheme ? negLight1Input    : negDark1Input
+var color negativeDarkColor  = isLightTheme ? negLight2Input    : negDark2Input
+var color borderColor        = isLightTheme ? borderLightInput  : borderDarkInput
+var color textColor          = isLightTheme ? textLightInput    : textDarkInput
+
+// @variable A `symbolNum`x`symbolNum` matrix holding data updates for each currency pair.
+varip matrix<dataUpdate> valuesMatrix = matrix.new<dataUpdate>(symbolNum, symbolNum)
+// @variable A `table` object displaying information for each currency pair. 
+var table t = table.new(
+     position.bottom_center, symbolNum + 1, symbolNum + 1, border_color = borderColor, border_width = 1
+ )
+// Calculate the height and width of each table cell, including headers, to evenly distribute cells within the pane.
+var float cellHeight = 100.0 / (symbolNum + 1)
+var float cellWidth  = 100.0 / (symbolNum + 1)
+
+// On the first historical bar, populate the table's headers with the currency symbols.
+if barstate.isfirst
+    t.cell(0, 0, bgcolor = chart.bg_color)
+    for [index, item] in symbolArray
+        t.cell(0, index + 1, item, height = cellHeight, width = cellWidth, text_color = textColor, bgcolor = chart.bg_color)
+        t.cell(index + 1, 0, item, height = cellHeight, width = cellWidth, text_color = textColor, bgcolor = chart.bg_color)
+
+// On the chart's last bar, get symbol data for each currency pair and populate the display table.
+if barstate.islast
+    // Loop through the `symbolArray`, populating a matrix with data for each possible currency pair combination. 
+    for [firstCurrIndex, item] in symbolArray
+        for secondCurrIndex = (firstCurrIndex) to symbolArray.size() - 1
+            if secondCurrIndex < symbolArray.size() and firstCurrIndex != secondCurrIndex
+                // Construct a currency pair symbol and its inverse (e.g., "EURUSD" and "USDEUR").
+                string pairName1 = item + symbolArray.get(secondCurrIndex)
+                string pairName2 = symbolArray.get(secondCurrIndex) + item
+                // Request the `close`, daily percentage change, and minimum tick size for the symbols. 
+                [pairRate1, dailyChg1, mintick1] = getPairData(pairName1)
+                [pairRate2, dailyChg2, mintick2] = getPairData(pairName2)
+                // Assign cross rates and daily changes, using inverse rates if data is missing.
+                float price1  = nz(pairRate1, 1 / pairRate2)
+                float price2  = nz(pairRate2, 1 / pairRate1)
+                float change1 = nz(dailyChg1, 1 / dailyChg2)
+                float change2 = nz(dailyChg2, 1 / dailyChg1)
+                // Update the values matrix with the calculated data for both currency pairs.
+                updateMatrix(valuesMatrix, price1, pairRate1, mintick1, change1, firstCurrIndex, secondCurrIndex)
+                updateMatrix(valuesMatrix, price2, pairRate2, mintick2, change2, secondCurrIndex, firstCurrIndex)
+    // Iterate over each cell in the values matrix and update the table display.
+    for [rowIndex, rowArray] in valuesMatrix
+        for [itemIndex, item] in rowArray
+            if not na(item)
+                // @variable Is `true` if the `modeInput` is "Heat map", `false` otherwise.
+                bool isHeatMap = modeInput == MI02
+                // @variable The text to display in the table cell.
+                string txt = isHeatMap ? str.tostring(item.dailyChange, format.percent) 
+                     : str.tostring(item.price, tickFormat(item.tickSize)) 
+                // @variable The cell's background color.
+                color col = chart.bg_color
+                // In "Cross rates" mode, choose the appropriate cell color based on price changes while the time since 
+                // the last update is under 200 milliseconds.
+                if timenow - item.lastUpdateTime < 200 and not isHeatMap
+                    col := switch
+                        item.price - item.prevPrice > 0 => positiveColor
+                        item.price - item.prevPrice < 0 => negativeDarkColor
+                        =>                                 col
+                // In "Heat map" mode, set the cell color based on the magnitude of the daily change.
+                else if isHeatMap
+                    col := switch 
+                        item.dailyChange <= -0.1 => negativeDarkColor
+                        item.dailyChange <   0   => negativelightColor
+                        item.dailyChange >=  0.1 => positiveColor
+                        =>                          col
+                // Update the table cell with the formatted text and background color.
+                t.cell(
+                     itemIndex + 1, rowIndex + 1, txt, bgcolor = col, height = cellHeight, width = cellWidth, 
+                     text_color = textColor
+                 )
+            // If no data is available, fill the cell with a neutral background color.
+            else 
+                t.cell(itemIndex + 1, rowIndex + 1, bgcolor = neutralColor)
+//#endregion

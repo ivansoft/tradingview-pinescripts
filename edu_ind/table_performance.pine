@@ -1,0 +1,150 @@
+//@version=6
+indicator("Performance")
+
+bool   includeCurrentSymbolInput = input.bool(true, "Include Chart Symbol")
+string symbolListInput           = input.text_area("AAPL, NASDAQ:AMZN, EURUSD, ES1!, BTCUSD", "Symbol list", 
+  tooltip = "A list of symbols or ticker IDs, separated by commas, with optional spaces.")
+string tfListInput               = input.text_area("1W, 1M, 3M, 6M, 12M, YTD, 5Y", "Timeframe list", 
+  tooltip = "A list of timeframes, separated by commas, with optional spaces. A valid timeframe consists of a number followed by D, W, M, or Y. Additionally, YTD is supported.")
+
+// Color settings 
+string COLOR_GRP          = "Color settings"
+int    HEAVY_TRANSP       = 70
+int    LOW_TRANSP         = 90
+color  neutralColor       = color.new(color.gray, 80)
+color  posColorInput      = color.new(input.color(#089981, "Positive Color", group = COLOR_GRP, tooltip = "The base color for table cells that show positive values."), 0)
+color  negColorInput      = color.new(input.color(#F23745, "Negative Color", group = COLOR_GRP, tooltip = "The base color for table cells that show negative values."), 0)
+int    cutoffPercentInput = input.int(10, "Color intensity cutoff (%)", group = COLOR_GRP, display = display.none, 
+  tooltip = "The cutoff for maximum color intensity. Absolute values at or above this level have the same color.")
+
+// Table settings
+string TABLE_GRP          = "Table settings"
+string TT_WT              = "The table width as a percentage of the pane where the table is located. " + 
+  "If this value is 0, the width fits the contents of the table, and the table can be wider than the pane."
+string TT_HG              = "The table height as a percentage of the pane where the table is located. " + 
+  "If this value is 0, the height fits the contents of the table, and the table can be taller than the pane."
+
+string tablePositionInput = input.string("Center", "Table Position", options = ["Left", "Center", "Right"], group = TABLE_GRP, display = display.none)
+float  tableWidthInput    = input.float(100, "Table Width (%)", maxval = 100, minval = 0, group = TABLE_GRP, tooltip = TT_WT,  display = display.none)
+float  tableHeightInput   = input.float(95, "Table Height (%)", maxval = 100, minval = 0, group = TABLE_GRP, tooltip = TT_HG,  display = display.none)
+
+
+getArrayFromString(string str) =>
+
+    result = str.split(str, ",")
+
+    for [index, item] in result
+        trimmedItem = str.trim(item)
+        if trimmedItem == ""
+            result.remove(index)
+        else
+            result.set(index, trimmedItem)
+
+    result
+
+getTFMult(string timeframe) =>
+    multString = str.substring(timeframe, 0, str.length(timeframe) - 1)
+    mult = multString == "" ? 1 : int(str.tonumber(multString))
+    mult
+
+timeframeToMS(string timeframe) =>
+
+    lastBarYear  = year(last_bar_time)
+    lastBarMonth = month(last_bar_time)
+    lastBarDay   = dayofmonth(last_bar_time)
+
+    result = switch
+
+        str.endswith(timeframe, "Y") => 
+            timestamp(lastBarYear - getTFMult(timeframe), lastBarMonth, lastBarDay, hour, minute)
+
+        timeframe == "YTD" => 
+            timestamp(lastBarYear, 01, 01)
+
+        str.endswith(timeframe, "M") =>
+
+            totalMonths = lastBarYear * 12 + lastBarMonth - getTFMult(timeframe)
+            pastYear    = int(totalMonths / 12)
+            pastMonth   = totalMonths % 12
+            
+            if pastMonth == 0
+                pastYear -= 1
+                pastMonth := 12
+
+            timestamp(pastYear, pastMonth, lastBarDay, hour, minute)
+
+        str.endswith(timeframe, "W") or str.endswith(timeframe, "D") =>
+            last_bar_time - timeframe.in_seconds(timeframe) * 1000
+
+        => runtime.error("Unrecognized timeframe: " + timeframe), 0
+
+    result
+    
+makeTimeAnchors(timeframesArray) =>
+
+    timeAnchors = array.new<int>()
+
+    for item in timeframesArray
+        convertedTF = timeframeToMS(item)
+        timeAnchors.push(convertedTF)
+
+    timeAnchors
+
+writeValuesOnAnchors(timeframesArray, requestedSeries) =>
+    
+    var timeAnchorsArray = makeTimeAnchors(timeframesArray)
+    var valuesArray = array.new<float>(timeAnchorsArray.size())
+
+    for [index, anchorTimestamp] in timeAnchorsArray
+        if time > anchorTimestamp and time[1] <= anchorTimestamp
+            valuesArray.set(index, requestedSeries[1])
+
+    [timeAnchorsArray, valuesArray, requestedSeries, syminfo.description]
+
+requestPastCloses(array<string> timeframesArray, string symbol, float source) =>
+
+    [timeAnchorsArray, valuesArray, currClose, description] = request.security(symbol, "1D", writeValuesOnAnchors(timeframesArray, source), lookahead = barmerge.lookahead_on)
+    [timeAnchorsArray, valuesArray, currClose, description]
+
+
+var array<string> timeframesArray = getArrayFromString(tfListInput)
+var array<string> symbolsArray    = getArrayFromString(symbolListInput)
+
+if barstate.isfirst and includeCurrentSymbolInput and not symbolsArray.includes(syminfo.ticker)
+    symbolsArray.insert(0, syminfo.tickerid)
+
+var tablePosition = switch tablePositionInput
+    "Left"   => position.middle_left
+    "Center" => position.middle_center
+    "Right"  => position.middle_right
+
+var changesTable = table.new(tablePosition, timeframesArray.size() + 1, symbolsArray.size() + 1, border_width = 3)
+
+if barstate.islast
+
+    cellWidth  = tableWidthInput / (timeframesArray.size() + 1)
+    cellHeight = tableHeightInput / (symbolsArray.size() + 1)
+
+    for [index, timeframe] in timeframesArray
+        changesTable.cell(index + 1, 0, timeframe, bgcolor = neutralColor, text_color = chart.fg_color, width = cellWidth, height = cellHeight)
+
+    for [index, symbol] in symbolsArray
+        [timestampsArray, historicalClosesArray, currClose, description] = requestPastCloses(timeframesArray, symbol, close)
+
+        changesTable.cell(0, index + 1, description, tooltip = description, bgcolor = neutralColor, text_color = chart.fg_color, width = cellWidth, height = cellHeight)
+
+        for [jndex, value] in historicalClosesArray
+            changePercent = (currClose - value) / value * 100
+            cellColorBase = changePercent >= 0 ? posColorInput : negColorInput
+            cellColor = color.from_gradient(changePercent, 0, cutoffPercentInput, color.new(cellColorBase, LOW_TRANSP), color.new(cellColorBase, HEAVY_TRANSP))
+            cellText = str.tostring(changePercent, format.percent)
+            cellTooltip = str.format_time(timestampsArray.get(jndex), "dd MMM YYYY")
+
+            if na(changePercent)
+                cellColorBase := chart.fg_color
+                cellColor := color.new(neutralColor, LOW_TRANSP)
+                cellText := "No data"
+                cellTooltip := na
+
+            changesTable.cell(jndex + 1, index + 1, cellText, tooltip = cellTooltip, bgcolor = cellColor, 
+              text_color = cellColorBase, width = cellWidth, height = cellHeight)

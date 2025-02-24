@@ -1,0 +1,141 @@
+//@version=5
+
+// @description: This library demonstrates functions to calculate conditional averages, i.e., of only values meeting certain criteria.
+
+library("ConditionalAverages")
+
+
+// ———————————————————— Library functions {
+
+
+// @function        Gathers values of the source when a condition is true and averages them over the total number of occurrences of the condition. 
+// @param src       (series int/float) The source of the values to be averaged. 
+// @param cond      (series bool) The condition determining when a value will be included in the set of values to be averaged.
+// @returns         (float) A cumulative average of values when a condition is met.
+export avgWhen(series float src, series bool cond) =>
+    float cumTotal = ta.cum(cond ? src : 0)
+    float cumCount = ta.cum(cond ? 1   : 0)
+    float result   = cumTotal / cumCount
+
+
+// @function        Gathers values of the source when a condition is true and averages them over a defined number of occurrences of the condition. 
+// @param src       (series int/float) The source of the values to be averaged. 
+// @param cond      (series bool) The condition determining when a value will be included in the set of values to be averaged.
+// @param cnt       (simple int) The quantity of last occurrences of the condition for which to average values.
+// @returns         (float) The average of `src` for the last `x` occurrences where `cond` is true.
+export avgWhenLast(series float src, series bool cond, simple int cnt) =>
+    var float[] valuesToAverage = array.new_float(cnt, na)
+    if cond
+        array.push(valuesToAverage, src)
+        array.shift(valuesToAverage)
+    float result = array.avg(valuesToAverage)
+
+
+// @function        Gathers values of the source when a condition is true and averages them over the total number of occurrences during a defined number of bars back. 
+// @param src       (series int/float) The source of the values to be averaged. 
+// @param cond      (series bool) The condition determining when a value will be included in the set of values to be averaged.
+// @param cnt       (simple int) The quantity of bars back to evaluate.
+// @returns         (float) The average of `src` in last `cnt` bars, but only when `cond` is true.
+export avgWhenInLast(series float src, series bool cond, simple int cnt) =>
+    float total  = math.sum(cond ? src : 0, cnt)
+    float count  = math.sum(cond ? 1   : 0, cnt)
+    float result = total / count
+
+
+// @function        Averages values of the source since a condition was true. 
+// @param src       (series int/float) The source of the values to be averaged. 
+// @param cond      (series bool) The condition determining when the average is reset.
+// @returns         (float) The average of `src` since `cond` was true.
+export avgSince(series float src, series bool cond) =>
+    var float[] valuesToAverage = array.new_float()
+    if cond
+        array.clear(valuesToAverage)
+    array.push(valuesToAverage, src)
+    float result = array.avg(valuesToAverage)
+    
+
+// @function        Averages values of `src` when `cond` is true, over a moving window of length `ms` milliseconds. 
+// @param src       (series int/float) The source of the values to be averaged. 
+// @param ms        (simple int) The time duration in milliseconds defining the size of the moving window.
+// @param cond      (series bool) The condition determining which values are included. Optional.
+// @param minBars   (simple int) The minimum number of values to keep in the moving window. Optional.
+// @returns         (float) The average of `src` when `cond` is true in the moving window.
+export avgForTimeWhen(series float src, simple int ms, series bool cond = true, simple int minBars = 1) =>
+    var float[] sources = array.new_float(0)
+    var int[]   times   = array.new_int(0)
+    if cond
+        array.push(sources, src)
+        array.push(times,   time)
+    if array.size(sources) > 0
+        while time - array.get (times, 0) >= ms and array.size(sources) > minBars
+            array.shift(sources)
+            array.shift(times)
+    float result = array.avg(sources)
+
+
+// @function        Sums values of `src` when `cond` is true, over a moving window of length `ms` milliseconds. 
+// @param src       (series int/float) The source of the values to be summed. 
+// @param ms        (simple int) The time duration in milliseconds defining the size of the moving window.
+// @param cond      (series bool) The condition determining which values are included. Optional.
+// @param minBars   (simple int) The minimum number of values to keep in the moving window. Optional.
+// @returns         (float) The sum of `src` when `cond` is true in the moving window.
+export totalForTimeWhen(series float src, simple int ms, series bool cond = true, simple int minBars = 1) =>
+    var float[] sources = array.new_float(0)
+    var int[]   times   = array.new_int(0)
+    if cond
+        array.push(sources, src)
+        array.push(times,   time)
+    if array.size(sources) > 0
+        while time - array.get(times, 0) >= ms and array.size(sources) > minBars
+            array.shift(sources)
+            array.shift(times)
+    float result = array.sum(sources)
+    
+// }
+
+
+// ———————————————————— Example Code {
+
+// Base colors
+color MAGENTA = #FF00FF
+color GREEN1  = #00FF00
+color LINK_WATER = #D1D4DC
+color STORM_GREY = #787B86
+// Constant for `avgWhenLast()` to set how many of the latest occurrences of the condition to average the source over.
+int LAST_OCCURRENCES = 20
+// Constant for `avgWhenInLast()`to set how many bars back to average the source over when the condition is true.
+int LAST_BARS = 20
+// Constant value for the number of milliseconds in one day.
+int MS_IN_1D = 24 * 60 * 60 * 1000
+// Minimum qty of bars to keep in the `avgForTimeWhen()` and `totalForTimeWhen()` calcs.
+int MIN_BARS = 10
+// Source values we will be averaging.
+float source = volume
+// Condition on which we want to calculate our averages.
+bool condition = close > open
+// Color for up/down volume columns.
+color volumeColor = condition ? LINK_WATER : STORM_GREY
+
+
+// Plot the volume columns.
+plot(volume, "volume", color.new(volumeColor, 65), 4, plot.style_histogram)
+
+// Average volume over all occurrences of the condition (average volume on all up bars) in the dataset.
+plot(avgWhen(source, condition), "avgWhen()", color.navy)
+
+// Average volume over the last number of occurrences of the condition (average volume of the `LAST_OCCURRENCES` up bars).
+plot(avgWhenLast(source, condition, LAST_OCCURRENCES), "avgWhenLast()", color.orange)
+
+// Average volume over the last number of bars back when the condition was true (average up bar volume in the `LAST_BARS` bars).
+plot(avgWhenInLast(source, condition, LAST_BARS), "avgWhenInLast()", color.aqua)
+
+// Average volume since the condition was true (average volume since the start of the day).
+plot(avgSince(source, ta.change(time("D"))), "avgSince()", MAGENTA)
+
+// Average volume in a rolling window of time equal to 1 day.
+plot(avgForTimeWhen(source, MS_IN_1D, true, MIN_BARS), "avgForTimeWhen()", GREEN1)
+
+// Total volume in a rolling window of time equal to 1 day.
+plotchar(totalForTimeWhen(source, MS_IN_1D, true, MIN_BARS), "totalForTimeWhen()", "", location.top, size = size.tiny)
+// }
+

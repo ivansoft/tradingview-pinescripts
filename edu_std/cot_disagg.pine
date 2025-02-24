@@ -1,0 +1,210 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © TradingView
+
+//@version=6
+indicator("Commitment of Traders: Disaggregated Metrics", "COT Disaggregated", format = format.volume)
+
+// "Commitment of Traders: Disaggregated Metrics"
+// v4, 2024.11.26
+
+// This code was written using the recommendations from the Pine Script™ User Manual's Style guide:
+//    https://www.tradingview.com/pine-script-docs/writing/style-guide/
+
+
+
+// +-----------------------------------+------------------------+
+// | Disaggregated (COT2) Metric Names |       Directions       |
+// +-----------------------------------+------------------------+
+// | Open Interest                     | No direction           |
+// | Producer Merchant Positions       | Long, Short            |
+// | Swap Positions                    | Long, Short, Spreading |
+// | Managed Money Positions           | Long, Short, Spreading |
+// | Other Reportable Positions        | Long, Short, Spreading |
+// | Total Reportable Positions        | Long, Short            |
+// | Nonreportable Positions           | Long, Short            |
+// | Traders Total                     | No direction           |
+// | Traders Producer Merchant         | Long, Short            |
+// | Traders Swap                      | Long, Short, Spreading |
+// | Traders Managed Money             | Long, Short, Spreading |
+// | Traders Other Reportable          | Long, Short, Spreading |
+// | Traders Total Reportable          | Long, Short            |
+// | Concentration Gross LE 4 TDR      | Long, Short            |
+// | Concentration Gross LE 8 TDR      | Long, Short            |
+// | Concentration Net LE 4 TDR        | Long, Short            |
+// | Concentration Net LE 8 TDR        | Long, Short            |
+// +-----------------------------------+------------------------+
+
+
+
+import TradingView/LibraryCOT/4 as cot
+
+
+
+//#region ———————————————————— Constants and inputs
+
+
+// Allowed directions
+string ND  = " [ND]"
+string LS  = " [L|Sh]"
+string LSS = " [L|Sh|Sp]"
+
+// Metric information types
+string IO01 = "Futures"
+string IO02 = "Options"
+string IO03 = "Futures + Options"
+
+// Metric names
+string MB01 = "Open Interest"
+string MB02 = "Producer Merchant Positions"
+string MB03 = "Swap Positions"
+string MB04 = "Managed Money Positions"
+string MB05 = "Other Reportable Positions"
+string MB06 = "Total Reportable Positions"
+string MB07 = "Nonreportable Positions"
+string MB08 = "Traders Total"
+string MB09 = "Traders Producer Merchant"
+string MB10 = "Traders Swap"
+string MB11 = "Traders Managed Money"
+string MB12 = "Traders Other Reportable"
+string MB13 = "Traders Total Reportable"
+string MB14 = "Concentration Gross LE 4 TDR"
+string MB15 = "Concentration Gross LE 8 TDR"
+string MB16 = "Concentration Net LE 4 TDR"
+string MB17 = "Concentration Net LE 8 TDR"
+
+// "Metric" input options
+string M01 = MB01 + ND
+string M02 = MB02 + LS
+string M03 = MB03 + LSS
+string M04 = MB04 + LSS
+string M05 = MB05 + LSS
+string M06 = MB06 + LS
+string M07 = MB07 + LS
+string M08 = MB08 + ND
+string M09 = MB09 + LS
+string M10 = MB10 + LSS
+string M11 = MB11 + LSS
+string M12 = MB12 + LSS
+string M13 = MB13 + LS
+string M14 = MB14 + LS
+string M15 = MB15 + LS
+string M16 = MB16 + LS
+string M17 = MB17 + LS
+
+// Tooltips
+string TT_METRIC = "Each metric option shows the allowed directions in square brackets:
+     \n [ND] 🠆 No direction\n [L] 🠆 Long\n [Sh] 🠆 Short\n [Sp] 🠆 Spreading"
+string TT_DIR = "The direction must apply to the selected metric. The above field's dropdown menu shows
+     which direction options are valid for each metric." 
+string TT_TYPE = "Qualifies the retrieved metric data. See the 'Old and Other Futures' section of the CFTC's
+     Explanatory Notes for details on types."
+string TT_OPTIONS = "Determines whether the data includes information from futures, options, or both."
+string TT_OVERRIDE = "This field allows manual specification of the CFTC COT code. When the field is not empty, the
+     indicator uses this code instead of determining the code based on the chart symbol's root or currency information.
+     For example, if the field's value is '001602', the indicator requests wheat futures data, regardless of the
+     current chart."
+
+// Inputs
+string metricNameInput      = input.string(M01,            "Metric",          options = [M01, M02, M03, M04, M05, M06, M07, M08, M09, M10, M11, M12, M13, M14, M15, M16, M17], tooltip = TT_METRIC)
+string metricDirectionInput = input.string("No direction", "Direction",       options = ["No direction", "Long", "Short", "Spreading"], tooltip = TT_DIR)
+string metricTypeInput      = input.string("All",          "Type",            options = ["All", "Old", "Other"], tooltip = TT_TYPE)
+string includeOptionsInput  = input.string(IO01,           "Futures/Options", options = [IO01, IO02, IO03], tooltip = TT_OPTIONS)
+string userCFTCCodeInput    = input.string("",             "CFTC Code",       tooltip = TT_OVERRIDE)
+//#endregion
+
+
+
+//#region ———————————————————— Functions
+
+
+// @function                Retrieves the metric name associated with the user-specified "Metric" option. This function 
+//                          maps the "Metric" options to the corresponding internal identifiers the script uses.
+// @param userMetricName    (string) The user-selected "Metric" option. Its value should be one of the predefined 
+//                          "Metric" options (`M01` to `M17`), which contains the metric name (e.g, "Open Interest") 
+//                          and abbreviations for the allowed direction choices (e.g., "[ND]" for No direction, 
+//                          "[L|Sh]" for Long or Short).
+// @returns                 (string) The internal identifier the script uses to request the appropriate metric data. 
+//                          The value corresponds to one of the `MB*` constants, or it is an empty "string" if the 
+//                          `userMetricName` is not an available "Metric" option. 
+getMetricName(simple string userMetricName) =>
+    string result = switch userMetricName
+        M01 => MB01
+        M02 => MB02
+        M03 => MB03
+        M04 => MB04
+        M05 => MB05
+        M06 => MB06
+        M07 => MB07
+        M08 => MB08
+        M09 => MB09
+        M10 => MB10
+        M11 => MB11
+        M12 => MB12
+        M13 => MB13
+        M14 => MB14
+        M15 => MB15
+        M16 => MB16
+        M17 => MB17
+        => ""
+//#endregion
+
+
+
+//#region ———————————————————— Calculations
+
+
+// @variable The user-specified CFTC code if the "CFTC Code" input is not empty, a chart-based CFTC code otherwise. 
+var string cftcCode = userCFTCCodeInput != "" ? userCFTCCodeInput : cot.convertRootToCOTCode("Root")
+// @variable The "string" identifier for requesting Disaggregated metrics. 
+string typeCOT = "Disaggregated"
+// @variable The "string" identifier for the metric name. 
+var string metricName = getMetricName(metricNameInput)
+
+// @variable The COT ticker ID that specifies futures-only information. 
+var string futuresOnlyTicker = cot.COTTickerid(
+     typeCOT, cftcCode, false, metricName, metricDirectionInput, metricTypeInput
+ )
+// @variable The COT ticker ID that specifies futures and options information. 
+var string futuresWithOptionsTicker = cot.COTTickerid(
+     typeCOT, cftcCode, true, metricName, metricDirectionInput, metricTypeInput
+ )
+
+// @variable The requested Disaggregated metric for futures data.
+float futuresOnly = cot.requestCommitmentOfTraders(
+     typeCOT, cftcCode, false, metricName, metricDirectionInput, metricTypeInput
+ )
+// @variable The requested Disaggregated metric for futures and options data.
+float futuresWithOptions = cot.requestCommitmentOfTraders(
+     typeCOT, cftcCode, true, metricName, metricDirectionInput, metricTypeInput
+ ) 
+
+// @variable COT series for futures, options, or futures and options data, depending on the `includeOptionsInput`.
+float COTSeries = switch includeOptionsInput
+    IO01 => futuresOnly
+	IO02 => futuresWithOptions - futuresOnly
+	IO03 => futuresWithOptions
+	=> na
+//#endregion
+
+
+
+//#region ———————————————————— Display
+
+
+// Plot the `COTSeries` as a step line with diamonds.
+plot(COTSeries, "COT", style = plot.style_stepline_diamond)
+
+// @variable A `table` displaying symbol and COT ticker ID information in the bottom-right corner. 
+var table symbolDisplay = table.new(position.bottom_right, 1, 1)
+// Populate the `symbolDisplay` on the first bar. 
+if barstate.isfirst
+    color  TEXT_COLOR = color.white
+    color  BG_COLOR   = color.new(color.blue, 50)
+    string dataCOT    = userCFTCCodeInput != "" ? userCFTCCodeInput : cot.convertRootToCOTCode("Root", false)
+    string tickerID   = switch includeOptionsInput
+        IO01 => futuresOnlyTicker
+        IO02 => futuresWithOptionsTicker + "-" + futuresOnlyTicker
+        IO03 => futuresWithOptionsTicker
+    string txt = str.format("COT data for {0} {1}\nRequested ticker: {2}", dataCOT, includeOptionsInput, tickerID)
+    table.cell(symbolDisplay, 0, 0, txt, text_halign = text.align_left, text_color = TEXT_COLOR, bgcolor = BG_COLOR)
+//#endregion

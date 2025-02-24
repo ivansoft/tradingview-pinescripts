@@ -1,0 +1,151 @@
+// This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © TradingView
+
+//@version=6
+indicator("Ticker Tape", overlay = true)
+
+// Ticker Tape
+// v2, 2024.11.26
+
+// This code was written using the recommendations from the Pine Script™ User Manual's Style guide:
+//    https://www.tradingview.com/pine-script-docs/writing/style-guide/
+
+
+
+//#region ———————————————————— Constants and Inputs
+
+
+// Tooltips
+string TT_LTR = "When enabled, the ticker tape scrolls continuously across realtime updates. 
+     When disabled, the ticker tape remains static."
+string TT_OFF = "The initial scroll offset of the ticker tape. Determines the starting location of all 
+     information within the tape display."
+string TT_SYM = "A list of symbols or ticker IDs, separated by commas, with optional spaces."
+
+// Specify a list of symbols to include in the ticker tape and inputs to control its movement.
+bool   letTapeRunInput = input(true, "Running", tooltip = TT_LTR)
+int    offsetInput     = input.int(0, "Offset", 0, tooltip = TT_OFF)
+string symbolListInput = input.text_area("AAPL, EURUSD, ES1!, BINANCE:BTCUSDT", "Symbol list", tooltip = TT_SYM)
+//#endregion
+
+
+
+//#region ———————————————————— Functions and UDTs
+
+
+// @type                A custom type that holds information to include within the ticker tape.
+// @field ticker        (string) The ticker ID representing a security.
+// @field name          (string) The written name of the `ticker`. 
+// @field last          (float) The last `close` price of the requested ticker.
+// @field lastStr       (string) The "string" representation of the last `close` price.
+// @field change        (float) The change in price from the previous retrieved `close`.
+// @field changeStr     (string) The "string" representation of the price change.
+// @field changeP       (float) The price change expressed as a percentage.
+// @field upDown        (int) An indicator of the direction of change in price: 1 for up, -1 for down, 0 for no change.
+type Tape
+    string       ticker
+    string       name
+    varip float  last
+    varip string lastStr
+    varip float  change
+    varip string changeStr
+    varip float  changeP
+    varip int    upDown
+
+
+// @function            Fetches and returns a tuple of metrics for the specified `ticker` on the "1D" timeframe.
+// @param ticker        (series string) The ticker ID to request the data from.
+// @returns             ([float, string, float, string, float, string]) A tuple containing the following metrics for 
+//                      the requested dataset:
+//                      - The daily close price 
+//                      - The daily close price in string format 
+//                      - The daily change in price
+//                      - The daily change as a string 
+//                      - The daily change as a percentage 
+//                      - The symbol's description 
+fsec(series string ticker) =>
+    request.security(ticker, "1D",
+     [close, str.tostring(close, format.mintick), close - close[1], str.tostring(close - close[1], format.mintick), 
+     (close - close[1]) / close[1] * 100, syminfo.description], lookahead = barmerge.lookahead_on, calc_bars_count = 10)
+
+
+// @function            Creates an array of `Tape` objects for a given array of symbols.
+// @param symbolArray   (array<string>) An array of symbols or ticker IDs for which to create `Tape` objects.
+// @returns             (array<Tape>) An array containing a `Tape` object for each symbol in the `symbolArray`.
+makeTapes(array<string> symbolArray) =>
+    array<Tape> tapes = array.new<Tape>()
+    for ticker in symbolArray
+        tapes.push(Tape.new(ticker))
+    tapes
+
+
+// @function            Updates a `Tape` object with the latest data for its `ticker`, tracking whether the
+//                      `ticker` price moved up, down, or remained unchanged compared to the last recorded update.
+// @param this          (Tape) The `Tape` object to update.
+// @returns             (Tape) The updated `Tape` object. 
+method update(Tape this) =>
+    [last, lastStr, change, changeStr, changeP, name] = fsec(this.ticker)
+    this.upDown    := this.last < last ? 1 : this.last > last ? -1 : 0
+    this.name      := name
+    this.last      := last
+    this.lastStr   := lastStr
+    this.change    := change
+    this.changeStr := changeStr
+    this.changeP   := changeP
+    this
+
+
+// @function            Populates cells in a table with data from a `Tape` object. Callable as a method or a function.
+// @param this          (Tape) The `Tape` object containing the data to display.
+// @param display       (series table) The `table` instance that displays the data.
+// @param startCol      (series int) The starting column index in the table from which to begin populating cells.
+// @param cells         (series int) The total number of cells in the table's row, used for positioning data cyclically
+//                      across columns.
+// @returns             (void) The function has no explicit return value. 
+method fillCell(Tape this, series table display, series int startCol, series int cells) =>
+    table.cell(display, column = startCol, row = 0, text = this.name, text_color = chart.fg_color)
+    table.cell(display, column = (startCol + 1) % cells, row = 0, text = this.lastStr, 
+         text_color = this.upDown < 0 ? color.red : this.upDown > 0 ? color.green : color.gray
+     )
+    string chgString = this.changeStr + " (" + str.tostring(this.changeP, format.percent) + ")"
+    table.cell(display, column = (startCol + 2) % cells, row = 0, text = chgString, 
+         text_color = this.change < 0 ? color.red : this.change > 0 ? color.green : color.gray
+     )
+    table.cell(display, column = (startCol + 3) % cells, row = 0, text = "|", text_color = chart.fg_color)
+//#endregion
+
+
+
+//#region ———————————————————— Calculations
+
+
+// @variable An array constructed by splitting the `symbolListInput` on each comma, after removing whitespaces.
+var array<string> symbolsArray = str.split(str.replace_all(symbolListInput, " ", ""), ",")
+
+// Logic to update the ticker tape table on the latest bar.
+if barstate.islast
+    // @variable An array persisting across updates. Holds `Tape` objects for each symbol/ticker ID in `symbolsArray`.
+    varip array<Tape> tapes = makeTapes(symbolsArray)
+    // Update each `Tape` in the `tapes` array on each tick. 
+    for t in tapes
+        t.update()
+    // Create a new `table` instance with four cells for each `Tape` in the `tapes` array. 
+    var int cells = 4 * tapes.size()
+    var table tbl = table.new(
+         position = position.bottom_center, columns = cells, rows = 1, bgcolor = chart.bg_color, 
+         frame_width = 1, frame_color = color.gray
+     )
+    // Declare variables to track the current `timenow` and the number of realtime updates in intervals > 200 ms.
+    varip int lastUpdate = timenow
+    varip int shift = cells - 1 + offsetInput
+    // If `letTapeRunInput` is `true` and the time elapsed since the `lastUpdate` exceeds 200 ms, assign the new 
+    // `timenow` to the `lastUpdate` and increase the `shift` value by 1.
+    if letTapeRunInput and (timenow - lastUpdate) > 200
+        lastUpdate := timenow
+        shift += 1
+    // Update each cell in the table using data from the `Tape` objects in the `tapes` array. The cells that hold each 
+    // ticker's information depend on the `shift` value.
+    for [i, t] in tapes
+        int idx = (cells - 1 - ((i * 4 + shift) % cells))
+        t.fillCell(tbl, idx, cells)
+//#endregion

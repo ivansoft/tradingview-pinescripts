@@ -1,0 +1,243 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © TradingView
+
+//@version=5
+indicator("Intrabar Efficiency Ratio", precision = 4)
+
+// Intrabar Efficiency Ratio indicator
+// v2, 2023.03.25
+
+// This code was written using the recommendations from the Pine Script™ User Manual's Style Guide:
+//   https://www.tradingview.com/pine-script-docs/en/v5/writing/Style_guide.html
+
+
+
+import PineCoders/Time/4 as PCtime
+import PineCoders/lower_tf/4 as PCltf
+
+
+
+//#region ———————————————————— Constants and Inputs
+
+
+// ————— Constants
+
+// Colors 
+color  AQUA    = color.aqua 
+color  FUCHSIA = color.fuchsia
+color  GRAY    = #80808080
+color  GRAY_LT = #f5f3f3
+color  LIME    = color.lime
+color  MAROON  = color.maroon
+color  ROYAL   = #3BB3E4
+color  ROSE    = #FF0080
+color  TEAL    = color.teal
+color  WHITE   = color.white
+color  YELLOW  = color.yellow
+
+// MAs
+string MA01 = "Simple"
+string MA02 = "Exponential"
+string MA03 = "Wilder (RMA)"
+string MA04 = "Weighted"
+string MA05 = "Volume-Weighted"
+string MA06 = "Arnaud Legoux"
+string MA07 = "Hull"
+
+// LTF distinction 
+string LTF1  = "Covering most chart bars (least precise)"
+string LTF2  = "Covering some chart bars (less precise)"
+string LTF3  = "Covering less chart bars (more precise)"
+string LTF4  = "Covering few chart bars (very precise)"
+string LTF5  = "Covering the least chart bars (most precise)"
+string LTF6  = "~12 intrabars per chart bar"
+string LTF7  = "~24 intrabars per chart bar"
+string LTF8  = "~50 intrabars per chart bar"
+string LTF9  = "~100 intrabars per chart bar"
+string LTF10 = "~250 intrabars per chart bar"
+
+// Tooltips
+string TT_DT   = "Three display options are available:
+  \n• 'Line' displays an MA of IER of the selected type over the medium length number of bars.
+  \n• 'Candles' displays candles using the short and long MAs.
+  \n• 'Circles' uses the three MAs."
+string TT_LTF  = "Your selection here controls how many intrabars will be analyzed for each chart bar. 
+  The more intrabars you analyze, the more precise the calculations will be,
+  but the less chart bars will be covered by the indicator's calculations because a maximum of 100K intrabars can be analyzed.\n\n
+  The first five choices determine the lower timeframe used for intrabars using how much chart coverage you want.
+  The last five choices allow you to select approximately how many intrabars you want analyzed per chart bar."
+string TT_CDL  = "[Down body, down wick, up body, up wick]"
+string TT_CIR  = "[Extreme low, down color, up color, extreme high]"
+string TT_RW   = "Applies weighting to IER values based on the relative size of the close-to-close value over the specified number of bars."
+string TT_LEN  = "These are the short, medium and long lengths used to calculate the MAs. Different display modes use different MAs. Only the 'Circles' mode uses all three."
+
+// Strings
+string TAB_TXT = "Uses intrabars at {0}\nAvg intrabars per chart bar: {1,number,#.#}\nChart bars covered: {2} of {3}"
+
+// Error Messages
+string NI_ERR1 = "No intrabar information exists at the '{0}' timeframe."
+string MA_ERR1 = "The length of the short MA must be less than or equal to that of the medium MA."
+string MA_ERR2 = "The length of the medium MA must be less than or equal to that of the long MA."
+
+
+// ————— Inputs
+
+string  GRP1 = "Visuals"
+string  displayTypeInput        = input.string("Line",      "Display",                  group = GRP1, inline = "10", options = ["Line", "Candles", "Circles"], tooltip = TT_DT)
+color   lineColorInput          = input.color(AQUA,         "Line   ",                  group = GRP1, inline = "13")
+color   bearBodyInput           = input.color(FUCHSIA,      "Candles",                  group = GRP1, inline = "11", tooltip = TT_CDL)
+color   bearWickInput           = input.color(MAROON,       "",                         group = GRP1, inline = "11")
+color   bullBodyInput           = input.color(LIME,         "",                         group = GRP1, inline = "11")
+color   bullWickInput           = input.color(TEAL,         "",                         group = GRP1, inline = "11")
+color   lowColorInput           = input.color(YELLOW,       "Circles ",                 group = GRP1, inline = "12", tooltip = TT_CIR)
+color   bearColorInput          = input.color(ROSE,         "",                         group = GRP1, inline = "12")
+color   bullColorInput          = input.color(ROYAL,        "",                         group = GRP1, inline = "12")
+color   highColorInput          = input.color(LIME,         "",                         group = GRP1, inline = "12")
+bool    showInfoBoxInput        = input.bool(true,          "Show information box ",    group = GRP1)
+string  infoBoxSizeInput        = input.string("small",     "Size ",                    group = GRP1, inline = "14", options = ["tiny", "small", "normal", "large", "huge", "auto"])
+string  infoBoxYPosInput        = input.string("bottom",    "↕",                        group = GRP1, inline = "14", options = ["top", "middle", "bottom"])
+string  infoBoxXPosInput        = input.string("left",      "↔",                        group = GRP1, inline = "14", options = ["left", "center", "right"])
+color   infoBoxColorInput       = input.color(GRAY,         "",                         group = GRP1, inline = "14")
+color   infoBoxTxtColorInput    = input.color(GRAY_LT,      "T",                        group = GRP1, inline = "14")
+
+string  GRP2 = "Settings"
+string  ltfModeInput            = input.string(LTF3,        "Intrabar Precision",       group = GRP2, options = [LTF1, LTF2, LTF3, LTF4, LTF5, LTF6, LTF7, LTF8, LTF9, LTF10], tooltip = TT_LTF)
+string  maTypeInput             = input.string(MA06,        "MA Type ",                 group = GRP2, inline = "20", options = [MA01, MA02, MA03, MA04, MA05, MA06, MA07])
+int     shortLengthInput        = input.int(10,             "MA lengths: S",            group = GRP2, inline = "21")
+int     midLengthInput          = input.int(20,             "M",                        group = GRP2, inline = "21")
+int     longLengthInput         = input.int(40,             "L",                        group = GRP2, inline = "21", tooltip = TT_LEN)
+bool    rankWeightInput         = input.bool(false,         "Weigh using relative close changes", group = GRP2, inline = "22")
+int     rankLengthInput         = input.int(100,            "",                         group = GRP2, inline = "22", tooltip = TT_RW)
+//#endregion
+
+
+
+//#region ———————————————————— Functions 
+
+
+//@function         Returns the `type` MA of the `src` over the `length`.
+//@param src        (series float) The source value used to calculate the MA.
+//@param length     (simple int) The length value used to calculate the MA.
+//@param type       (simple string) The type of MA required (uses constants that must be defined earlier in the script).
+//@returns          (series float) The MA value.
+ma(series float src, simple int length, simple string type) =>
+    float result = switch type
+        MA01 => ta.sma( src, length)
+        MA02 => ta.ema( src, length)
+        MA03 => ta.rma( src, length)
+        MA04 => ta.wma( src, length)
+        MA05 => ta.vwma(src, length)
+        MA06 => ta.alma(src, length, 0.85, 6)
+        MA07 => ta.hma( src, length)
+        => na
+
+
+// @function        Determines a color based on the 100 bar percent rank of the input `value`.   
+// @param value     (series float) The value to determine the color. 
+// @returns         (color) The output color (uses color variables that must be defined earlier in the script).
+plotColor(series float value) =>
+    float percent = ta.percentrank(value, 100)
+    color result = 
+     switch 
+        percent > 90 => highColorInput
+        percent < 10 => lowColorInput
+        percent > 50 => bullColorInput
+        =>              bearColorInput
+//#endregion
+
+
+
+//#region ———————————————————— Calculations 
+
+
+// Get the LTF corresponding to user's selection.
+//   NOTE
+//      This is a good example of a case where we declare a variable with `var` to improve the script's execution time.
+//      Declaring it this way calls the `ltf()` function only once, on the dataset's first bar.
+//      The `ltf()` function only needs to return a "simple string" for use in `request.security_lower_tf()`,
+//      which entails that its value cannot change on further bars, so it is more efficient to restrict its execution to the first bar.
+//      Also, because the function's code mostly manipulates strings, which the Pine runtime doesn't process as efficiently as numeric values, this speeds up the script.
+var string ltfString = PCltf.ltf(ltfModeInput, LTF1, LTF2, LTF3, LTF4, LTF5, LTF6, LTF7, LTF8, LTF9, LTF10)
+
+// ———— IER
+// Get array of `close` to `close` changes in intrabars.
+array<float> travels = request.security_lower_tf(syminfo.tickerid, ltfString, math.abs(ta.change(close)))
+float totalTravels   = travels.sum()
+// Get the `close` to `close` change of the chart's last two bars.
+float chartBarChange = nz(ta.change(close))
+// Calculate a weight using the relative size of the `close` to `close` change.
+float weight         = rankWeightInput ? ta.percentrank(math.abs(chartBarChange), rankLengthInput) / 100.0 : 1.0
+// Calculate IER and its MAs.
+float ier            = nz(chartBarChange / totalTravels) * weight
+float maLong         = ma(ier, longLengthInput,  maTypeInput)
+float maMid          = ma(ier, midLengthInput,   maTypeInput)
+float maShort        = ma(ier, shortLengthInput, maTypeInput)
+
+// ———— Intrabar stats
+[intrabars, chartBarsCovered, avgIntrabars] = PCltf.ltfStats(travels)
+int chartBars = bar_index + 1
+//#endregion
+
+
+
+//#region ———————————————————— Visuals 
+
+
+// Display conditions. 
+bool candles      = displayTypeInput == "Candles"
+bool circles      = displayTypeInput == "Circles"
+bool maLine       = displayTypeInput == "Line"
+candlePlotDisplay = candles ? display.all  - display.pane : display.none
+candleDisplay     = candles ? display.pane : display.none
+circleDisplay     = circles ? display.all  : display.none
+lineDisplay       = maLine  ? display.all  : display.none
+
+// IER candles.
+float o = maLong
+float h = math.max(ier, maLong, maShort)
+float l = math.min(ier, maLong, maShort)
+float c = maShort
+color candleColor = c > o ? bullBodyInput : bearBodyInput
+color wickColor   = c > o ? bullWickInput : bearWickInput
+plot(o, "IER Candle Open",  candleColor, display = candlePlotDisplay)
+plot(h, "IER Candle High",  wickColor,   display = candlePlotDisplay)
+plot(l, "IER Candle Low",   wickColor,   display = candlePlotDisplay)
+plot(c, "IER Candle Close", candleColor, display = candlePlotDisplay)
+plotcandle(o, h, l, c, "IER candles", candleColor, wickColor, bordercolor = candleColor, display = candleDisplay)
+
+// IER MAs.
+plot(maLong,  "Long MA",  color.new(plotColor(maLong),  20), 2, plot.style_circles, display = circleDisplay)
+plot(maMid,   "Mid MA",   color.new(plotColor(maMid),   10), 1, plot.style_circles, display = circleDisplay)
+plot(maShort, "Short MA", color.new(plotColor(maShort),  0), 1, plot.style_circles, display = circleDisplay)
+plot(maMid,   "Mid MA",   lineColorInput,                    1, plot.style_line,    display = lineDisplay)
+hline(0)
+
+// Key values in indicator values and the Data Window.
+displayLocations = display.status_line + display.data_window
+plot(ier,               "Intrabar Efficiency Ratio", display = displayLocations)
+plot(intrabars,         "Intrabars in Chart Bar",    display = displayLocations)
+plot(avgIntrabars,      "Avg. Intrabars",            display = displayLocations)
+plot(chartBarsCovered,  "Chart Bars Covered",        display = displayLocations)
+plot(chartBars,         "Total Chart Bars",          display = displayLocations)
+plot(totalTravels,      "totalTravels",              display = displayLocations)
+plot(chartBarChange,    "chartBarChange",            display = displayLocations)
+plot(weight,            "weight",                    display = displayLocations)
+
+// Information box.
+if showInfoBoxInput
+    var table infoBox = table.new(infoBoxYPosInput + "_" + infoBoxXPosInput, 1, 1)
+    string formattedLtf = PCtime.formattedNoOfPeriods(timeframe.in_seconds(ltfString) * 1000)
+    string txt = str.format(TAB_TXT, formattedLtf, avgIntrabars, chartBarsCovered, chartBars)
+    if barstate.isfirst
+        table.cell(infoBox, 0, 0, txt, text_color = infoBoxTxtColorInput, text_size = infoBoxSizeInput, bgcolor = infoBoxColorInput)
+    else if barstate.islast
+        table.cell_set_text(infoBox, 0, 0, txt)        
+
+// Runtime errors.
+if ta.cum(intrabars) == 0 and barstate.islast
+    runtime.error(str.format(NI_ERR1, ltfString))
+else if shortLengthInput > midLengthInput
+    runtime.error(MA_ERR1)
+else if midLengthInput > longLengthInput
+    runtime.error(MA_ERR2)
+//#endregion

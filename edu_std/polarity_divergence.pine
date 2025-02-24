@@ -1,0 +1,48 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © TradingView
+
+//@version=5
+indicator("Polarity Divergences", overlay = true)
+
+// Polarity Divergences
+// v2, 2022.07.30
+
+// This code was written using the recommendations from the Pine Script™ User Manual's Style Guide:
+//   https://www.tradingview.com/pine-script-docs/en/v5/writing/Style_guide.html
+
+bool    showCharUpInput  = input.bool(false,            "Show character on divergences for up bars")
+string  charUpInput      = input.string("↗",            "  Character",  inline = "01")
+color   charUpColorInput = input.color(color.lime,      "",             inline = "01")
+bool    charUpBelowInput = input.bool(true,             "Below bar",    inline = "01")
+
+bool    showCharDnInput  = input.bool(false,            "Show character on divergences for down bars")
+string  charDnInput      = input.string("↘",            "  Character",  inline = "02")
+color   charDnColorInput = input.color(color.fuchsia,   "",             inline = "02")
+bool    charDnAboveInput = input.bool(true,             "Above bar",    inline = "02")
+
+bool    fillBodiesInput  = input.bool(true,             "Fill candle bodies on divergences")
+
+
+// @function    Selects a LTF from the chart's TF.
+// @returns     (simple string) A timeframe string.
+ltfStep() =>
+    int MS_IN_DAY = 1000 * 60 * 60 * 24
+    int tfInMs    = timeframe.in_seconds() * 1000
+    string result =
+      switch
+        tfInMs < MS_IN_DAY      => "1"
+        tfInMs < MS_IN_DAY * 7  => "30"
+        => "D"
+
+
+// Calculate the polarity of the chart bar. 
+float chartBarPolarity = math.sign(close - open)
+// Fetch an array containing the +1/0/-1 polarity of each intrabar.
+float[] polaritiesArray = request.security_lower_tf(syminfo.tickerid, ltfStep(), chartBarPolarity)
+// Calculate the average polarity of intrabars.
+float intrabarPolarity = math.sign(array.sum(polaritiesArray))
+// Color the chart bar orange when the majority of intrabar polarities does not match that of the chart bar.
+barcolor(fillBodiesInput and intrabarPolarity != chartBarPolarity ? color.orange : na)
+// Plot characters showing divergence direction, if enabled. 
+plotchar(showCharUpInput ? intrabarPolarity < chartBarPolarity : na, "Div. on up bar",   charUpInput, charUpBelowInput ? location.belowbar : location.abovebar, charUpColorInput, size = size.tiny)
+plotchar(showCharDnInput ? intrabarPolarity > chartBarPolarity : na, "Div. on down bar", charDnInput, charDnAboveInput ? location.abovebar : location.belowbar, charDnColorInput, size = size.tiny)

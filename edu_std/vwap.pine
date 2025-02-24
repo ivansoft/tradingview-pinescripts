@@ -1,0 +1,123 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © TradingView
+
+//@version=5
+indicator("Chart VWAP", overlay = true)
+
+// Chart VWAP
+// v2 2023.01.19
+
+// This code was written using the recommendations from the Pine Script™ User Manual's Style Guide:
+//   https://www.tradingview.com/pine-script-docs/en/v5/writing/Style_guide.html
+
+
+
+import PineCoders/VisibleChart/1 as PCvc
+
+
+
+//#region ———————————————————— Constants and Inputs 
+
+
+// Constants
+string AVG_TT  = "Enables the average price line for all visible chart bars"
+string OHLC_TT = "'Show chart OHLC levels' displays 4 lines at the open, high, low, and close of the visible chart range.
+  \n\n'Show HL and % to Close values' displays values on the high and low levels when 'Show Chart OHLC' is also enabled.
+  The percentage is the distance from the current price to the level."
+string TT_STD  = "The multiplier for the standard deviation bands offset above and below the VWAP. Example: 1.0 is 100% of the offset value. 
+  \n\nNOTE: A value of 0.0 will hide the bands."
+
+// Inputs
+bool   showAvgInput   = input.bool(true,   "Show Bar Average",              tooltip = AVG_TT)
+bool   showOhlcInput  = input.bool(false,  "Show chart OHLC levels ",       inline = "11")
+bool   showLevelInput = input.bool(true,   "Show HL and % to Close values", inline = "11", tooltip = OHLC_TT)
+float  stdMultInput   = input.float(0.0,   "Standard Deviation Multiplier", inline = "12", minval = 0.0, step = 0.5, tooltip = TT_STD)
+//#endregion
+
+
+
+//#region ———————————————————— Functions 
+
+
+// @function            Sets a horizontal line to the visible chart width at a specified level.
+// @param lineId        (line) The line identifier. 
+// @param level         (series float) The price level for the line. 
+// @returns             (void) Alters the left and right points of `lineId` to the visible chart width at a specified `level`.
+setChartLine(line lineId, series float level) =>
+    line.set_xy1(lineId, chart.left_visible_bar_time,  level)
+    line.set_xy2(lineId, chart.right_visible_bar_time, level)
+
+
+// @function            Calculates the percent difference between two prices.
+// @param startPrice    (series float) The begining point to calculate percent from.
+// @param endPrice      (series float) The end point to calculate percent to. 
+// @returns             (float) A difference in percent between the `startPrice` and the `endPrice`
+percent(series float startPrice, series float endPrice) => 
+    float result = (startPrice - endPrice) / endPrice * 100
+
+
+// @function            Calculates the volume weighted average price (VWAP) and upper and lower standard deviation bands of the visible bar range..
+// @param src           (series float) The source data for the calculation. Optional. Default is `hlc3`.
+// @param stDev         (simple float) Standard deviation for the upper and lower bands. Optional. Default is 1.
+// @returns             ([float, float, float]) A tuple containing the visible VWAP, upper band, and lower band values.
+vVwap(series float src = hlc3, simple float stDev = 1) =>
+    bool  startTime = time == chart.left_visible_bar_time
+    [vwap, upper, lower] = ta.vwap(src, startTime, stDev)
+//#endregion
+
+
+
+//#region ———————————————————— Calculations 
+
+
+// VWAP anchored on the leftmost visible bar.
+[vwap, upper, lower] = vVwap(hlc3, stdMultInput)
+
+// Average `close` of all visible bars.
+float barAvg = PCvc.avg()
+
+// OHLC values for the visible chart time range.
+[chartOpen, chartHigh, chartLow, chartClose, chartVolume] = PCvc.ohlcv()
+//#endregion
+
+
+
+//#region ———————————————————— Visuals 
+
+
+// Plot the VWAP and avg bar price. 
+plot(vwap, "Chart VWAP", color.orange, 2)
+plot(PCvc.barIsVisible() and showAvgInput ? barAvg : na, "Visible Avg.", color.new(color.gray, 50))
+p1 = plot(stdMultInput != 0 ? upper : na, "Chart VWAP", color.green)
+p2 = plot(stdMultInput != 0 ? lower : na, "Chart VWAP", color.green)
+fill(p1, p2, color.new(color.green, 95), "Bands Fill")
+
+// Relative x-coordinate time for the price/percent label (25% of the visible space's width, starting from the left).
+int labelTime  = PCvc.chartXTimePct(25)
+
+// Show OHLC levels and HL values when enabled. 
+if showOhlcInput and barstate.islast 
+    // Declare drawing objects once and set later. 
+    var line  chartHighLine  =  line.new(na, na, na, na, xloc.bar_time, extend.right, #4CAF5075,  line.style_solid,  1)
+    var line  chartLowLine   =  line.new(na, na, na, na, xloc.bar_time, extend.right, #f2364580,  line.style_solid,  1)
+    var line  chartOpenLine  =  line.new(na, na, na, na, xloc.bar_time, extend.right, color.gray, line.style_dotted, 1)
+    var line  chartCloseLine =  line.new(na, na, na, na, xloc.bar_time, extend.right, #787B8675,  line.style_solid,  1)
+    var label chartHighLabel = label.new(na, na, "",     xloc.bar_time, yloc.price,   color(na),    label.style_label_down, #4CAF5075)
+    var label chartLowLabel  = label.new(na, na, "",     xloc.bar_time, yloc.price,   color(na),    label.style_label_up,   #f2364580)
+    
+    // OHLC lines.
+    setChartLine(chartOpenLine,  chartOpen)
+    setChartLine(chartHighLine,  chartHigh)
+    setChartLine(chartLowLine,   chartLow)
+    setChartLine(chartCloseLine, chartClose)
+
+    // Display high, low and percent to `close` values when enabled.
+    if showLevelInput
+        string labelFormat = "{0} ({1, number, #.##}%)"
+        // Reposition labels.
+        label.set_xy(chartHighLabel, labelTime, chartHigh)
+        label.set_xy(chartLowLabel,  labelTime, chartLow)
+        // Update label values with each chart update.
+        label.set_text(chartHighLabel, str.format(labelFormat, str.tostring(chartHigh, format.mintick), percent(chartHigh, chartClose)))
+        label.set_text(chartLowLabel,  str.format(labelFormat, str.tostring(chartLow,  format.mintick), percent(chartLow,  chartClose)))
+//#endregion

@@ -1,0 +1,75 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © TradingView
+
+//@version=5
+indicator("Chart CAGR", overlay = true)
+
+// Chart CAGR
+// v1, 2022.10.09
+
+// This code was written using the recommendations from the Pine Script™ User Manual's Style Guide:
+//   https://www.tradingview.com/pine-script-docs/en/v5/writing/Style_guide.html
+
+
+
+import PineCoders/VisibleChart/1 as chart
+import TradingView/ta/2 as ta
+
+
+
+//#region ———————————————————— Constants and Inputs
+
+
+// ————— Constants
+color   GRAY    = color.silver
+color   NOCOLOR = #FFFFFF00
+
+// ————— Inputs
+string  infoBoxSizeInput     = input.string("normal", "Size ", inline = "display", options = ["tiny", "small", "normal", "large", "huge", "auto"])
+string  infoBoxYPosInput     = input.string("bottom", "↕",     inline = "display", options = ["top", "middle", "bottom"])
+string  infoBoxXPosInput     = input.string("right",  "↔",     inline = "display", options = ["left", "center", "right"])
+color   infoBoxColorInput    = input.color(NOCOLOR,   "",      inline = "display")
+color   infoBoxTxtColorInput = input.color(GRAY,      "T",     inline = "display")
+//#endregion
+
+
+
+//#region ———————————————————— Functions
+
+
+//@function         Calculates the growth rate as a percent from the `exitPrice` relative to the `entryPrice`.    
+//@param entryPrice (series float) The entry price.     
+//@param exitPrice  (series float) The exit price.         
+//@returns          (float) The percent growth rate. 
+growthRate(series float entryPrice, series float exitPrice) =>
+    float result = (exitPrice / entryPrice - 1) * 100
+//#endregion
+
+
+
+//#region ———————————————————— Calculations
+
+
+float firstChartBarOpen = chart.open()
+float lastChartBarClose = chart.close()
+int   firstChartBarTime = chart.left_visible_bar_time
+int   lastChartBarTime  = chart.right_visible_bar_time
+float cagr              = ta.cagr(firstChartBarTime, firstChartBarOpen, lastChartBarTime, lastChartBarClose)
+float gr                = growthRate(firstChartBarOpen, lastChartBarClose)
+//#endregion
+
+
+
+//#region ———————————————————— Visuals
+
+
+var table infoBox = table.new(infoBoxYPosInput + "_" + infoBoxXPosInput, 2, 3)
+if barstate.isfirst
+    table.cell(infoBox, 0, 0, "Growth rate:", text_color = infoBoxTxtColorInput, text_size = infoBoxSizeInput, bgcolor = infoBoxColorInput)
+    table.cell(infoBox, 0, 1, "CAGR:",        text_color = infoBoxTxtColorInput, text_size = infoBoxSizeInput, bgcolor = infoBoxColorInput)
+    table.cell(infoBox, 1, 0, "",             text_color = infoBoxTxtColorInput, text_size = infoBoxSizeInput, bgcolor = infoBoxColorInput)
+    table.cell(infoBox, 1, 1, "",             text_color = infoBoxTxtColorInput, text_size = infoBoxSizeInput, bgcolor = infoBoxColorInput)
+else if barstate.islast
+    table.cell_set_text(infoBox, 1, 0, str.tostring(gr,   format.percent))
+    table.cell_set_text(infoBox, 1, 1, str.tostring(cagr, format.percent))
+//#endregion

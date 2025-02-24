@@ -1,0 +1,198 @@
+// This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © TradingView
+
+//@version=5
+indicator("Sharpe and Sortino Ratios")
+ 
+// Sharpe and Sortino Ratios
+// v1, 2024.11.09
+
+// This code was written using the recommendations from the Pine Script™ User Manual's Style guide:
+//    https://www.tradingview.com/pine-script-docs/en/v5/writing/Style_guide.html
+
+
+
+import TradingView/RiskMetrics/2 as TVrm
+import TradingView/ta/8 as TVta
+
+
+
+//#region ———————————————————— Constants and Inputs
+
+
+// Constants
+string BM01     = "Fixed rate of return (%)"
+string BM02     = "Benchmark symbol returns"
+color  WHITE    = color.white
+color  GRAY30   = color.new(color.gray, 30)
+color  GRAY60   = color.new(color.gray, 60)
+color  ORANGE80 = color.new(color.orange, 80)
+color  AQUA80   = color.new(color.aqua, 80)
+
+// Tooltips
+string TT_TF = "Timeframe of the sampled returns."
+string TT_NT = "Maximum number of monthly periods to analyze."
+string TT_FI = "Type of benchmark to compare against the chart symbol's returns:\n
+     - If 'Fixed rate of return (%)', compares chart symbol returns to a fixed annual percentage benchmark.\n
+     - If 'Benchmark symbol returns', compares chart symbol returns to the returns from a benchmark symbol
+     (e.g., 'AMEX:SPY') to calculate Information ratios."
+string TT_PT = "Annual fixed rate of return to compare when the benchmark type is 'Fixed rate of return (%)'."
+string TT_SY = "Symbol to compare when the benchmark type is 'Benchmark symbol returns'."
+
+// Specify the timeframe of the returns, the number of calculation periods to analyze, and the performance benchmark.
+string tfInput         = input.timeframe("1M",    "Returns timeframe",                tooltip = TT_TF) 
+int    numOfTFsInput   = input.int(60,            "Max no. of periods used",          tooltip = TT_NT) 
+bool   useFixedInput   = input.string(BM01,       "Benchmark return type",            tooltip = TT_FI, options = [BM01, BM02]) == BM01
+float  percentageInput = input.float(2,           "    Risk-free rate of return (%)", tooltip = TT_PT, minval = 0) 
+string symbolInput     = input.symbol("AMEX:SPY", "    Benchmark symbol",             tooltip = TT_SY)
+
+// Group to control the appearance of the info table. 
+string GRP1                 = "Info table"
+bool   showInfoBoxInput     = input.bool(true,       "Show info table",                group = GRP1)
+string infoBoxSizeInput     = input.string("normal", "Size ",           inline = "21", group = GRP1, options = ["tiny", "small", "normal", "large", "huge", "auto"])
+string infoBoxYPosInput     = input.string("bottom", "↕",               inline = "21", group = GRP1, options = ["top", "middle", "bottom"])
+string infoBoxXPosInput     = input.string("right",  "↔",               inline = "21", group = GRP1, options = ["left", "center", "right"])
+color  infoBoxColorInput    = input.color(GRAY30,    "",                inline = "21", group = GRP1)
+color  infoBoxTxtColorInput = input.color(WHITE,     "",                inline = "21", group = GRP1)
+//#endregion
+
+
+
+//#region ———————————————————— Functions 
+
+
+// @function            Requests aligned prices from the chart's symbol and an `altSymbol` for statistical comparison.
+//                      Utilizes spread tickers to ensure the times of requested prices maintain consistent time 
+//                      alignment with the periodic points on the current chart.
+// @param altSymbol     (simple string) The symbol to align with the chart's symbol. For consistency, the spreads 
+//                      formed by this symbol and the chart's use extended hours and dividend adjustment modifiers, and 
+//                      they inherit additional settings from the chart, including "settlement-as-close" preferences. 
+// @param timeframe     (simple string) The timeframe of the aligned data request. Must be greater than or equal to  
+//                      the chart's timeframe. 
+// @param offset        (simple int) The bar offset applied to the requested prices. Use a value greater than or equal 
+//                      to 1 to prevent lookahead bias in requested HTF historical data.
+// @returns             ([series float, series float, series float, series float]) A tuple containing the aligned 
+//                      current and previous prices from the chart's symbol and the modified `altSymbol` on the 
+//                      specified `timeframe`.
+getAlignedPrices(simple string altSymbol, simple string timeframe, simple int offset = 0) =>
+    var string standard1 = ticker.standard(syminfo.tickerid)
+    var string standard2 = ticker.standard(altSymbol)
+    var string sumSpread = ticker.modify(
+         ticker.inherit(syminfo.tickerid, standard1 + "+" + standard2), session.extended, adjustment.dividends
+     )
+    var string diffSpread = ticker.modify(
+         ticker.inherit(syminfo.tickerid, standard1 + "-" + standard2), session.extended, adjustment.dividends
+     )
+    float currPrice = close[offset]
+    float prevPrice = nz(close[offset + 1], open[offset])
+    [currSum, prevSum] = request.security(
+         sumSpread, timeframe, [currPrice, prevPrice], barmerge.gaps_on, barmerge.lookahead_on
+     )
+    [currDiff, prevDiff] = request.security(
+         diffSpread, timeframe, [currPrice, prevPrice], barmerge.gaps_on, barmerge.lookahead_on
+     )
+    [0.5 * (currSum + currDiff), 0.5 * (currSum - currDiff), 0.5 * (prevSum + prevDiff), 0.5 * (prevSum - prevDiff)]
+//#endregion
+
+
+
+//#region ———————————————————— Calculations
+
+
+// @variable `true` if the selected timeframe is higher than the current chart's timeframe.
+var bool isHtf = timeframe.in_seconds(tfInput) > timeframe.in_seconds()
+// @variable The fixed annual rate of return used when `useFixedInput` is `true`, 0 otherwise.
+var float fixedReturn = useFixedInput ? percentageInput : 0.0
+// @variable The estimated fixed rate of return per period.
+var float fixedPeriodReturn = fixedReturn / 12 
+
+// Request prices for the chart's symbol on the `tfInput` timeframe with full history to compare with the `fixedReturn`.
+[htfCurrent, htfPrevious] = request.security(
+     syminfo.tickerid, tfInput, [close[1], nz(close[2], open[1])], barmerge.gaps_on, barmerge.lookahead_on
+ )
+// Request aligned prices for the chart symbol and `symbolInput` on the `tfInput` with modifiers for direct comparison.
+[chartVal, benchVal, chartVal1, benchVal1] = getAlignedPrices(symbolInput, timeframe.period)
+[htfChart, htfBench, htfChart1, htfBench1] = getAlignedPrices(symbolInput, tfInput, 1)
+
+// Determine the price values from the current symbol and the `symbolInput` used for returns calculations.
+float chartPrice  = useFixedInput ? (isHtf ? htfCurrent : close) : (isHtf ? htfChart : chartVal)
+float chartPrice1 = useFixedInput ? (isHtf ? htfPrevious : nz(close[1], open)) : (isHtf ? htfChart1 : chartVal1)
+float benchPrice  = isHtf ? htfBench : benchVal
+float benchPrice1 = isHtf ? htfBench1 : benchVal1
+
+// @variable The chart symbol's sampled percent change value.
+float chartReturn = TVta.changePercent(chartPrice, chartPrice1)
+// @variable The benchmark symbol's sampled percent change value. Returns 0 when `useFixedInput` is `true`.
+float benchReturn = useFixedInput ? 0.0 : TVta.changePercent(benchPrice, benchPrice1)
+
+// @variable The array of monthly returns used in the ratio calculations.
+array<float> periodicReturns = TVrm.getPeriodicReturns(chartReturn, benchReturn, numOfTFsInput)
+
+// @variable The Sharpe ratio of the `periodicReturns`.
+float sharpe = TVrm.sharpeRatio(periodicReturns, fixedReturn)
+// @variable The Sortino ratio of the `periodicReturns`.
+float sortino = TVrm.sortinoRatio(periodicReturns, fixedReturn)
+
+// Create arrays of periodic returns from `chartReturn` and `benchReturn` values for display calculations.
+array<float> symbolChanges    = TVrm.getPeriodicReturns(chartReturn, numOfTFsInput)
+array<float> benchmarkChanges = useFixedInput ? na : TVrm.getPeriodicReturns(benchReturn, numOfTFsInput)
+// @variable The average return value in the `symbolChanges` array.
+float avgSymbolChange = symbolChanges.avg()
+// @variable The average periodic benchmark return.
+float avgBenchmarkChange = useFixedInput ? fixedPeriodReturn : benchmarkChanges.avg()
+// @variable Condition that indicates when new data is available if the `tfInput` is a higher timeframe.
+bool isNewPeriod = isHtf and not na(chartReturn)
+//#endregion
+
+
+
+//#region ———————————————————— Errors and outputs
+
+
+// Raise an error if the `tfInput` is smaller than the chart's timeframe.
+if timeframe.in_seconds(tfInput) < timeframe.in_seconds()
+    runtime.error("For accurate ratios, the requested TF must be greater than or equal to the TF of the chart.")
+
+// @variable The `chartReturn` series with `na` masking for display purposes.
+float chartReturnDisplay = fixnan(chartReturn)
+// @variable The `benchReturn` series with `na` masking for display purposes, or `na` if `useFixedInput` is `true`.
+float benchReturnDisplay = fixnan(useFixedInput ? na : benchReturn)
+// Main plot, fill, and background colors
+color plotColor = isNewPeriod ? color(na) : chartReturnDisplay < 0.0 ? color.orange : color.aqua
+color fillColor = isNewPeriod ? color(na) : chartReturnDisplay < 0.0 ? ORANGE80 : AQUA80
+color bgColor   = not isNewPeriod ? color(na) : chartReturnDisplay < 0.0 ? ORANGE80 : AQUA80
+
+// Plot the `chartReturnDisplay` and 0, then fill the space between them.
+symbolChangePlot = plot(chartReturnDisplay, "Chart symbol return", plotColor, precision = 2, format = format.percent)
+zeroPlot         = plot(0, "Zero level", color.new(color.gray, 60), display = display.pane)
+fill(symbolChangePlot, zeroPlot, fillColor, "Chart symbol return fill")
+// Plot the `benchReturnDisplay` value for visual comparison when `useFixedInput` is `false`.
+plot(benchReturnDisplay, "Benchmark symbol return", color.gray, 2, precision = 2, format = format.percent)
+// Highlight the main chart's background when `isNewPeriod` to signify the direction of `chartReturnDisplay`.
+bgcolor(bgColor, title = "Background highlight", force_overlay = true)
+
+// Plot the average chart symbol and benchmark returns alongside the Sharpe and Sortino ratios in the Data Window.
+dataWindow = display.data_window 
+plot(avgSymbolChange,    "Avg. chart symbol return", color.purple, display = dataWindow, format = format.percent)
+plot(avgBenchmarkChange, "Avg. benchmark return",    color.blue,   display = dataWindow, format = format.percent)
+plot(sharpe,  "Sharpe",  sharpe  > 0 ? color.teal : color.maroon, precision = 5, display = dataWindow)
+plot(sortino, "Sortino", sortino > 0 ? color.teal : color.maroon, precision = 5, display = dataWindow)
+
+// Display the base period, number of periods, returns timeframe, and the calculated ratios in a table on the last bar.
+if barstate.islast and showInfoBoxInput
+    var table tfDisplay = table.new(str.format("{0}_{1}", infoBoxYPosInput, infoBoxXPosInput), 1, 1)
+    string tableTxt  = str.format(
+         "Calculation base period:  {0}
+         \n# of calculation periods: {1}
+         \nReturns timeframe:        {2}
+         \nSharpe ratio:             {3}
+         \nSortino ratio:            {4}",
+         "1M", periodicReturns.size(), 
+         tfInput == "" ? (timeframe.isdwm and timeframe.multiplier == 1 ? "1" : "") + timeframe.period : tfInput, 
+         str.tostring(sharpe, "#.#####"), str.tostring(sortino, "#.#####")
+     )
+    table.cell(
+         tfDisplay, 0, 0, tableTxt, bgcolor = infoBoxColorInput, text_color = infoBoxTxtColorInput, 
+         text_size = infoBoxSizeInput, text_halign = text.align_left, text_font_family = font.family_monospace
+     )
+//#endregion
