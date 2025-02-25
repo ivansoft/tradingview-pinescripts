@@ -2,11 +2,11 @@
 // © ivansoft
 
 //@version=6
-strategy("PriceStep Pivot Strategy", "price_step_strategy", overlay = true, max_labels_count = 500)
+strategy("PriceStep Pivot Strategy", "price_step_strategy", overlay = true, max_labels_count = 100)
 
-var int fractal = input.int(100, "fractal")
-var float step1p = input.float(0.5, "step 1 %", inline = "01") / 100  // 0.5 %
-var float step10p = input.float(5, "step 10 %", inline = "01") / 100  // 5 %
+var int fractal = input.int(100, "fractal bars")
+var float step1p = input.float(0.5, "step x1 %", inline = "01") / 100  // 0.5 %
+var float step10p = input.float(5, "step x10 %", inline = "01") / 100  // 5 %
 var bool bgfill = input.bool(true, "Backgroung Fill")
 
 var divisor = array.from(
