@@ -46,7 +46,8 @@ dividx1 = divisor.binary_search_rightmost(math.ceil(close * step1p))
 step1 = divisor.get(dividx1)
 
 closeint1 = step1 * math.round(close / step1)
-
+highint1 = step1 * math.ceil(high / step1)
+lowint1 = step1 * math.floor(low / step1)
 
 value = volume == 0.0 ? na : volume * hl2
 
@@ -91,8 +92,13 @@ isvcum10m = vcum10m >= vp99m10
 isany = isvcum1m or isvcum3m or isvcum5m or isvcum10m or isvalueP100 or isvalueP99
 
 var arrsteps = array.new<float>()
+var arrsteps_h = array.new<float>()
+var arrsteps_l = array.new<float>()
 
-stepchanged = arrsteps.size() > 0 and  arrsteps.last() != closeint1
+stepchanged = switch
+    close > open => arrsteps_h.size() > 0 and  arrsteps_h.last() != highint1
+    close < open => arrsteps_l.size() > 0 and  arrsteps_l.last() != lowint1
+    => arrsteps.size() > 0 and  arrsteps.last() != closeint1
 
 iisvalueP100 = (not isvalueP100[1] and isvalueP100) or (isvalueP100 and stepchanged)
 iisvalueP99 = (not isvalueP99[1] and isvalueP99) or (isvalueP99 and stepchanged)
@@ -103,16 +109,28 @@ iisvcum10m = (not isvcum10m[1] and isvcum10m) or (isvcum10m and stepchanged)
 iisany = (not isany[1] and isany) or (isany and stepchanged)
 
 if iisany
-    if close >= open
-        debugLabelUp(str.format("{0}",closeint1))
+    if close > open
+        debugLabelUp(str.format("{0}",highint1))
     else if close < open
-        debugLabelDn(str.format("{0}",closeint1))
+        debugLabelDn(str.format("{0}",lowint1))
+    else
+        debugLabelUp(str.format("{0}",closeint1))
 
 if isany
     if arrsteps.size() < 1
         arrsteps.push(closeint1)
     else if arrsteps.last() != closeint1
         arrsteps.push(closeint1)
+
+    if arrsteps_h.size() < 1
+        arrsteps_h.push(highint1)
+    else if arrsteps_h.last() != highint1
+        arrsteps_h.push(highint1)
+
+    if arrsteps_l.size() < 1
+        arrsteps_l.push(lowint1)
+    else if arrsteps_l.last() != lowint1
+        arrsteps_l.push(lowint1)
 
 
 colorplotvalue = switch
