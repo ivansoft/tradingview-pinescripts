@@ -1,58 +1,124 @@
 //@version=6
-indicator("Price Spike Detector", "price_spike", format = format.price, overlay = false)
+indicator("Price Impulse Detector", "price_impulse", format = format.price, overlay = false)
 
-barsP99 = input.int(1500, "Percentile Bars", inline = "01")
-percP99 = input.float(99.75, "P99 %", inline = "01")
-barsCum = input.int(3, "Cumulative Bars", inline = "01")
-// barsCum2 = input.int(3, "Bars x2", inline = "01")
-dispP99 = input.bool(true, "Levels P99", group = "Show/Hide", inline = "1")
+barsP99 = input.int(200, "Percentile Bars", inline = "01")
+percP99 = input.float(95, "P99 %", inline = "01")
+barsCum = input.int(5, "Cumulative Bars", inline = "02")
+barsCumP99 = input.int(1500, "Bars", inline = "02")
+percCumP99 = input.float(99, "P99 %", inline = "02")
+dispHigh = input.bool(true, "High", group = "Show/Hide", inline = "0")
+dispLow = input.bool(true, "Low", group = "Show/Hide", inline = "0")
+dispClose = input.bool(true, "Close", group = "Show/Hide", inline = "0")
+dispOpen = input.bool(false, "Open", group = "Show/Hide", inline = "0")
+dispOpenBarsize = input.bool(false, "Size", group = "Show/Hide", inline = "0")
+dispHL = input.bool(false, "HL", group = "Show/Hide", inline = "0")
+dispLH = input.bool(false, "LH", group = "Show/Hide", inline = "0")
+dispHH = input.bool(false, "HH", group = "Show/Hide", inline = "0")
+dispLL = input.bool(false, "LL", group = "Show/Hide", inline = "0")
+dispLevels = input.bool(true, "Levels", group = "Show/Hide", inline = "1")
+dispP99 = input.bool(true, "P99", group = "Show/Hide", inline = "1")
+dispP100 = input.bool(true, "P100", group = "Show/Hide", inline = "1") 
 dispCum = input.bool(true, "Cumulative", group = "Show/Hide", inline = "2")
 dispCumP99 = input.bool(true, "P99", group = "Show/Hide", inline = "2")
+cumSource = input.string("close", "Source", ["close","high","low","open","size"], group = "Show/Hide", inline = "2")
 dispBg = input.bool(true, "Highlight Background", group = "Show/Hide")
 
-price_change_positive = high > close[1] ? high-close[1] : 0
-price_change_negative = low < close[1] ? low-close[1] : 0
+high_change = high - close[1]
+low_change = low - close[1]
+close_change = close - close[1]
+open_change = close - open[1]
+barsize = close >= close[1] ? high - low : low - high
+highlow = high - low[1]
+lowhigh = low - high[1]
+highhigh = high - high[1]
+lowlow = low - low[1]
 
-price_change_positive_p99 = ta.percentile_nearest_rank(price_change_positive, barsP99, percP99)
-price_change_negative_p99 = ta.percentile_nearest_rank(-price_change_negative, barsP99, percP99)
-price_change_positive_p100 = ta.percentile_nearest_rank(price_change_positive, barsP99, 100)
-price_change_negative_p100 = ta.percentile_nearest_rank(-price_change_negative, barsP99, 100)
 
-colorchangepos = switch
-    price_change_positive_p100 <= price_change_positive => color.new(color.purple, 50)
-    price_change_positive_p99 <= price_change_positive => color.new(color.blue, 50)
-    => color.new(color.gray, 50)
-colorchangeneg = switch
-    price_change_negative <= -price_change_negative_p100 => color.new(color.purple, 50)
-    price_change_negative <= -price_change_negative_p99 => color.new(color.blue, 50)
-    => color.new(color.gray, 50)
+high_change_p99 = ta.percentile_nearest_rank(high_change, barsP99, percP99)
+high_change_p100 = ta.percentile_nearest_rank(high_change, barsP99, 100)
+low_change_p99 = ta.percentile_nearest_rank(-low_change, barsP99, percP99)
+low_change_p100 = ta.percentile_nearest_rank(-low_change, barsP99, 100)
 
-plot(price_change_positive, "+change", style = plot.style_columns, color=colorchangepos)
-plot(price_change_negative, "-change", style = plot.style_columns, color=colorchangeneg)
 
-plot(price_change_positive_p99, "+changeP99", color = color.new(color.gray,50), display = dispP99 ? display.all : display.none)
-plot(-price_change_negative_p99, "-changeP99", color = color.new(color.gray,50), display = dispP99 ? display.all : display.none)
+colorchangehigh = switch
+    // high_change >= high_change_p100 => color.new(color.purple, 50)
+    // high_change >= high_change_p99 => color.new(color.blue, 50)
+    => color.new(color.lime, 35)
+colorchangelow = switch
+    // low_change <= -low_change_p100 => color.new(color.purple, 50)
+    // low_change <= -low_change_p99 => color.new(color.blue, 50)
+    => color.new(color.red, 35)
 
-// bgcolor_price_change = switch
-//     price_change_positive >= price_change_positive_p99 => color.new(color.green, 85)
-//     price_change_negative >= price_change_negative_p99 => color.new(color.red, 85)
-//     => na
-// bgcolor(bgcolor_price_change, display = dispBg ? display.all : display.none)
-// bgcolor(bgcolor_price_change, force_overlay = true, display = dispBg ? display.all : display.none)
+plot(high_change, "high", style = plot.style_columns, color=colorchangehigh, display = dispHigh ? display.all : display.none)
+plot(low_change, "low", style = plot.style_columns, color=colorchangelow, display = dispLow ? display.all : display.none)
+plot(close_change, "close", style = plot.style_columns, color=color.new(color.gray, 50), display = dispClose ? display.all : display.none)
+plot(open_change, "open", style = plot.style_columns, color=color.new(color.fuchsia, 50), display = dispOpen ? display.all : display.none)
+plot(barsize, "size", style = plot.style_columns, color=color.new(color.yellow, 50), display = dispOpenBarsize ? display.all : display.none)
 
-// // Cumulative
+plot(highlow, "hl", style = plot.style_columns, color=color.new(color.gray, 50), display = dispHL ? display.all : display.none)
+plot(lowhigh, "lh", style = plot.style_columns, color=color.new(color.gray, 50), display = dispLH ? display.all : display.none)
 
-cum_pos = math.sum(price_change_positive, barsCum)
-cum_neg = math.sum(price_change_negative, barsCum)
+plot(highhigh, "hh", style = plot.style_columns, color=color.new(color.gray, 50), display = dispHH ? display.all : display.none)
+plot(lowlow, "ll", style = plot.style_columns, color=color.new(color.gray, 50), display = dispLL ? display.all : display.none)
 
-plot(cum_pos, "+cum", color = color.new(color.olive,75), display = dispCum ? display.all : display.none)
-plot(cum_neg, "-cum", color = color.new(color.olive,75), display = dispCum ? display.all : display.none)
+plot(high_change_p99, "highP99", color = color.new(color.blue,50), display = dispLevels and dispP99 ? display.all : display.none)
+plot(-low_change_p99, "lowP99", color = color.new(color.blue,50), display = dispLevels and dispP99 ? display.all : display.none)
+plot(high_change_p100, "highP100", color = color.new(color.purple,50), display = dispLevels and dispP100 ? display.all : display.none)
+plot(-low_change_p100, "lowP100", color = color.new(color.purple,50), display = dispLevels and dispP100 ? display.all : display.none)
 
-// cum_positive_p99 = ta.percentile_nearest_rank(cum_pos, inputLengthPercentile, 99)
-// cum_negative_p99 = ta.percentile_nearest_rank(cum_neg, inputLengthPercentile, 99)
 
-// plot(cum_positive_p99, "+cumP99", color = color.new(color.olive,75), display = dispCum and dispCumP99 ? display.all : display.none)
-// plot(-cum_negative_p99, "-cumP99", color = color.new(color.olive,75), display = dispCum and dispCumP99 ? display.all : display.none)
+// Cumulative
+
+// cum_pos = math.sum(price_change_positive, barsCum)
+// cum_neg = math.sum(price_change_negative, barsCum)
+
+// , cumP99_pos, cumP99_neg
+[cum, cumP99_pos, cumP99_neg] = switch cumSource
+    "high" =>
+        cum = math.sum(high_change, barsCum)
+        p99 = ta.percentile_nearest_rank(cum, barsCumP99, percCumP99)
+        [cum, p99, na]
+    "low" =>
+        cum = math.sum(low_change, barsCum)
+        p99 = ta.percentile_nearest_rank(-cum, barsCumP99, percCumP99)
+        [cum,na,-p99]
+    "size" => 
+        cum = math.sum(barsize, barsCum)
+        [cum,na,na]
+    "open" =>
+        cum = math.sum(open_change, barsCum)
+        [math.sum(open_change, barsCum),na,na]
+    =>
+        cum = math.sum(close_change, barsCum)
+        p99p = ta.percentile_nearest_rank(cum, barsCumP99, percCumP99)
+        p99n = ta.percentile_nearest_rank(-cum, barsCumP99, percCumP99)
+        [math.sum(close_change, barsCum),p99p,-p99n]
+
+// plot(cum_pos, "+cum", color = color.new(color.olive,75), display = dispCum ? display.all : display.none)
+// plot(cum_neg, "-cum", color = color.new(color.olive,75), display = dispCum ? display.all : display.none)
+
+plot(cum, "cum", color = color.new(color.olive,50), display = dispCum ? display.all : display.none)
+
+// cum_positive_p99 = ta.percentile_nearest_rank(cum, barsCumP99, percCumP99)
+// cum_negative_p99 = ta.percentile_nearest_rank(-cum, barsCumP99, percCumP99)
+
+plot(cumP99_pos, "+cumP99", color = color.new(color.olive,75), display = dispCum and dispLevels and  dispCumP99 ? display.all : display.none)
+plot(cumP99_neg, "-cumP99", color = color.new(color.olive,75), display = dispCum and dispLevels and dispCumP99 ? display.all : display.none)
+
+
+// bgcolor
+
+bgcolor_price_change = switch
+    close_change >= high_change_p100 => color.new(color.purple, 85)
+    close_change <= -low_change_p100 => color.new(color.purple, 85)
+    close_change >= high_change_p99 => color.new(color.blue, 85)
+    close_change <= -low_change_p99 => color.new(color.blue, 85)
+    cum >= cumP99_pos => color.new(color.olive, 85)
+    cum <= cumP99_neg => color.new(color.olive, 85)
+    => na
+//bgcolor(bgcolor_price_change, display = dispBg ? display.all : display.none)
+bgcolor(bgcolor_price_change, force_overlay = true, display = dispBg ? display.all : display.none)
+
 
 // bgcolor_cum = switch
 //     cum_pos >= cum_positive_p99 => color.new(color.green, 85)
