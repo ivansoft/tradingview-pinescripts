@@ -1,5 +1,5 @@
 //@version=6
-indicator("Volume Value", "value", format = format.volume, overlay = false, timeframe="30S")
+indicator("Volume Value", "value", format = format.volume, overlay = false, max_labels_count = 500)  // timeframe="30S"
 
 
 p99bars = input.int(5000, "30S P99 Bars", inline = "000")
@@ -19,7 +19,33 @@ p99m10 = input.float(99.5, "%", inline = "010")
 
 //cumSize = input.int(2, "Cum Size", inline = "02")
 
+var float step1p = input.float(0.5, "step x1 %", inline = "1") / 100  // 0.5 %
+var float step10p = input.float(5, "step x10 %", inline = "1") / 100  // 5 %
+
 dispBg = input.bool(true, "Background Highlights", group = "Show/Hide")
+
+
+debugLabelUp(txt,overlay=true,offset=0) =>
+    label.new(bar_index+offset, high, txt, yloc = yloc.abovebar, style = label.style_arrowdown, force_overlay = overlay, textcolor = color.black)
+debugLabelDn(txt,overlay=true,offset=0) =>
+    label.new(bar_index+offset, low, txt, yloc = yloc.belowbar, style = label.style_arrowup, force_overlay = overlay, textcolor = color.black)
+
+
+var divisor = array.from(
+     0.0001, 0.0002, 0.0005,
+     0.001, 0.002, 0.005,
+     0.01, 0.02, 0.05,
+     0.1, 0.2, 0.5,
+     1, 2, 5,
+     10, 20, 50,
+     100, 200, 500,
+     1000, 2000, 5000,
+     10000, 20000, 50000)
+
+dividx1 = divisor.binary_search_rightmost(math.ceil(close * step1p))
+step1 = divisor.get(dividx1)
+
+closeint1 = step1 * math.round(close / step1)
 
 
 value = volume == 0.0 ? na : volume * hl2
@@ -62,9 +88,36 @@ isvcum3m = vcum3m >= vp99m3
 isvcum5m = vcum5m >= vp99m5
 isvcum10m = vcum10m >= vp99m10
 
+isany = isvcum1m or isvcum3m or isvcum5m or isvcum10m or isvalueP100 or isvalueP99
+
+var arrsteps = array.new<float>()
+
+stepchanged = arrsteps.size() > 0 and  arrsteps.last() != closeint1
+
+iisvalueP100 = (not isvalueP100[1] and isvalueP100) or (isvalueP100 and stepchanged)
+iisvalueP99 = (not isvalueP99[1] and isvalueP99) or (isvalueP99 and stepchanged)
+iisvcum1m = (not isvcum1m[1] and isvcum1m) or (isvcum1m and stepchanged)
+iisvcum3m = (not isvcum3m[1] and isvcum3m) or (isvcum3m and stepchanged)
+iisvcum5m = (not isvcum5m[1] and isvcum5m) or (isvcum5m and stepchanged)
+iisvcum10m = (not isvcum10m[1] and isvcum10m) or (isvcum10m and stepchanged)
+iisany = (not isany[1] and isany) or (isany and stepchanged)
+
+if iisany
+    if close >= open
+        debugLabelUp(str.format("{0}",closeint1))
+    else if close < open
+        debugLabelDn(str.format("{0}",closeint1))
+
+if isany
+    if arrsteps.size() < 1
+        arrsteps.push(closeint1)
+    else if arrsteps.last() != closeint1
+        arrsteps.push(closeint1)
+
+
 colorplotvalue = switch
-    isvalueP100 => color.new(color.purple, 50)
-    isvalueP99 => color.new(color.blue, 50)
+    isvalueP100 => color.new(color.purple, 35)
+    isvalueP99 => color.new(color.blue, 35)
     isvcum1m => color.new(color.gray, 50)
     isvcum3m => color.new(color.blue, 50)
     isvcum5m => color.new(color.olive, 50)
@@ -72,18 +125,18 @@ colorplotvalue = switch
     => color.new(color.gray, 75)
 
 bgcolorall = switch
-    isvalueP100 => color.new(color.purple, 85)
-    isvalueP99 => color.new(color.blue, 85)
+    iisvalueP100 => color.new(color.purple, 85)
+    iisvalueP99 => color.new(color.blue, 85)
     iisvcum1m => color.new(color.gray, 85)
-    iisvcum3m => color.new(color.blue, 85)
+    iisvcum3m => color.new(color.blue, 90)
     //isvcum5m => color.new(color.olive, 85)
     //isvcum10m => color.new(color.olive, 95)
     => na
 bgcolorall_1 = switch
-    isvalueP100 => color.new(color.purple, 85)
-    isvalueP99 => color.new(color.blue, 85)
+    iisvalueP100 => color.new(color.purple, 85)
+    iisvalueP99 => color.new(color.blue, 85)
     iisvcum1m => color.new(color.gray, 85)
-    iisvcum3m => color.new(color.blue, 85)
+    iisvcum3m => color.new(color.blue, 90)
     iisvcum5m => color.new(color.olive, 85)
     iisvcum10m => color.new(color.olive, 95)
     => na
