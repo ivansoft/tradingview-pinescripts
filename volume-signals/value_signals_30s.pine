@@ -99,25 +99,27 @@ enum StateLevel
 StateLevel state_high = na
 StateLevel state_low = na
 
-if closeint_ceil[2] < closeint_floor[1]  // close[2] < high[1] UP
-    txt = array.new<string>()
-    from_num = close[2] == closeint_ceil[2] ? closeint_ceil[2] + step1 : closeint_ceil[2]
-    to_num = closeint_floor[1]
-    for level = from_num to to_num by step1
-        txt.push(str.format("{0}",level))
-    debugLabelUp(txt.join(","),-1)
-else if close[2] < high[1] and closeint_ceil[2] == closeint_floor[1] and (low[1] < closeint_floor[1] and closeint_floor[1] < high[1])
-    debugLabelUp(str.format("{0}",closeint_floor[1]),-1)
+if barstate.isconfirmed
 
-if closeint_floor[2] > closeint_ceil[1]  // close[2] > low[1] DN
-    txt = array.new<string>()
-    from_num = close[2] == closeint_floor[2] ? closeint_floor[2] - step1 : closeint_floor[2]
-    to_num = closeint_ceil[1]
-    for level = from_num to to_num by step1
-        txt.push(str.format("{0}",level))
-    debugLabelDn(txt.join(","),-1)
-else if close[2] > low[1] and closeint_floor[2] == closeint_ceil[1] and (low[1] < closeint_ceil[1] and closeint_ceil[1] < high[1])
-    debugLabelDn(str.format("{0}",closeint_ceil[1]),-1)
+    if closeint_ceil[1] < closeint_floor  // CROSSED UP
+        txt = array.new<string>()
+        from_num = close[1] == closeint_ceil[1] ? closeint_ceil[1] + step1 : closeint_ceil[1]
+        to_num = closeint_floor
+        for level = from_num to to_num by step1
+            txt.push(str.format("{0}",level))
+        debugLabelUp(txt.join(","))
+    else if close[1] < high and closeint_ceil[1] == closeint_floor and (low < closeint_floor and closeint_floor < high)
+        debugLabelUp(str.format("{0}",closeint_floor))
+
+    if closeint_floor[1] > closeint_ceil  // CROSSED DN
+        txt = array.new<string>()
+        from_num = close[1] == closeint_floor[1] ? closeint_floor[1] - step1 : closeint_floor[1]
+        to_num = closeint_ceil
+        for level = from_num to to_num by step1
+            txt.push(str.format("{0}",level))
+        debugLabelDn(txt.join(","))
+    else if close[1] > low and closeint_floor[1] == closeint_ceil and (low < closeint_ceil and closeint_ceil < high)
+        debugLabelDn(str.format("{0}",closeint_ceil))
 
 
 // //if math.abs(high-highint1) <= roundzone1
