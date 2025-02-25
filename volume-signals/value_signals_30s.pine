@@ -108,7 +108,7 @@ if barstate.isconfirmed
         for level = from_num to to_num by step1
             txt.push(str.format("{0}",level))
         debugLabelUp(txt.join(","))
-    else if close[1] < high and closeint_ceil[1] == closeint_floor and (low < closeint_floor and closeint_floor < high)
+    else if close[1] < high and closeint_ceil[1] == closeint_floor and (open <= closeint_floor and closeint_floor < close)
         debugLabelUp(str.format("{0}",closeint_floor))
 
     if closeint_floor[1] > closeint_ceil  // CROSSED DN
@@ -118,8 +118,22 @@ if barstate.isconfirmed
         for level = from_num to to_num by step1
             txt.push(str.format("{0}",level))
         debugLabelDn(txt.join(","))
-    else if close[1] > low and closeint_floor[1] == closeint_ceil and (low < closeint_ceil and closeint_ceil < high)
+    else if close[1] > low and closeint_floor[1] == closeint_ceil and (close < closeint_ceil and closeint_ceil <= open)
         debugLabelDn(str.format("{0}",closeint_ceil))
+
+
+    if close <= highint_floor and open <= highint_floor and low < highint_floor
+        if high > highint_floor and close[1] <= highint_floor and open[1] <= highint_floor
+            debugLabelUp(str.format("touched {0}", highint_floor))
+        else
+            debugLabelUp(str.format("under {0}", highint_floor))
+
+    if close >= lowint_ceil and open >= lowint_ceil and high > lowint_ceil
+        if low < lowint_ceil and close[1] >= lowint_ceil and open[1] >= lowint_ceil
+            debugLabelDn(str.format("touched {0}", lowint_ceil))
+        else
+            debugLabelDn(str.format("above {0}", lowint_ceil))
+
 
 
 // //if math.abs(high-highint1) <= roundzone1
@@ -187,3 +201,4 @@ plot(value, color=colorplotvalue, style=plot.style_columns, title="Value")
 bgcolor(bgcolorall_1, editable = false, display = dispBg ? display.all : display.none)
 bgcolor(bgcolorall, editable = false, display = dispBg ? display.all : display.none, force_overlay = true)
 
+s
