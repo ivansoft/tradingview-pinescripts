@@ -68,20 +68,28 @@ colorplotvalue = switch
     isvcum1m => color.new(color.gray, 50)
     isvcum3m => color.new(color.blue, 50)
     isvcum5m => color.new(color.olive, 50)
-    isvcum10m => color.new(color.olive, 50)
+    isvcum10m => color.new(color.olive, 75)
     => color.new(color.gray, 75)
 
 bgcolorall = switch
     isvalueP100 => color.new(color.purple, 85)
     isvalueP99 => color.new(color.blue, 85)
-    isvcum1m => color.new(color.gray, 85)
-    isvcum3m => color.new(color.blue, 85)
-    isvcum5m => color.new(color.olive, 85)
-    isvcum10m => color.new(color.olive, 85)
+    iisvcum1m => color.new(color.gray, 85)
+    iisvcum3m => color.new(color.blue, 85)
+    //isvcum5m => color.new(color.olive, 85)
+    //isvcum10m => color.new(color.olive, 95)
+    => na
+bgcolorall_1 = switch
+    isvalueP100 => color.new(color.purple, 85)
+    isvalueP99 => color.new(color.blue, 85)
+    iisvcum1m => color.new(color.gray, 85)
+    iisvcum3m => color.new(color.blue, 85)
+    iisvcum5m => color.new(color.olive, 85)
+    iisvcum10m => color.new(color.olive, 95)
     => na
 
 plot(value, color=colorplotvalue, style=plot.style_columns, title="Value")
 
-bgcolor(bgcolorall, editable = false, display = dispBg ? display.all : display.none)
+bgcolor(bgcolorall_1, editable = false, display = dispBg ? display.all : display.none)
 bgcolor(bgcolorall, editable = false, display = dispBg ? display.all : display.none, force_overlay = true)
 
