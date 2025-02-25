@@ -1,6 +1,11 @@
 //@version=6
 indicator("Volume Value", "value", format = format.volume, overlay = false, max_labels_count = 500)  // timeframe="30S"
 
+debugLabelUp(txt,offset=0,overlay=true) =>
+    label.new(bar_index+offset, high, txt, yloc = yloc.abovebar, style = label.style_arrowdown, force_overlay = overlay, textcolor = color.black)
+debugLabelDn(txt,offset=0,overlay=true) =>
+    label.new(bar_index+offset, low, txt, yloc = yloc.belowbar, style = label.style_arrowup, force_overlay = overlay, textcolor = color.black)
+
 
 p99bars = input.int(5000, "30S P99 Bars", inline = "000")
 p99 = input.float(99.5, "%", inline = "000")
@@ -17,18 +22,10 @@ p99m5 = input.float(99.5, "%", inline = "005")
 p99m10bars = input.int(1000, "10m P99 Bars", inline = "010")
 p99m10 = input.float(99.5, "%", inline = "010")
 
-//cumSize = input.int(2, "Cum Size", inline = "02")
-
 var float step1p = input.float(0.5, "step x1 %", inline = "1") / 100  // 0.5 %
 var float step10p = input.float(5, "step x10 %", inline = "1") / 100  // 5 %
 
 dispBg = input.bool(true, "Background Highlights", group = "Show/Hide")
-
-
-debugLabelUp(txt,overlay=true,offset=0) =>
-    label.new(bar_index+offset, high, txt, yloc = yloc.abovebar, style = label.style_arrowdown, force_overlay = overlay, textcolor = color.black)
-debugLabelDn(txt,overlay=true,offset=0) =>
-    label.new(bar_index+offset, low, txt, yloc = yloc.belowbar, style = label.style_arrowup, force_overlay = overlay, textcolor = color.black)
 
 
 var divisor = array.from(
@@ -44,23 +41,21 @@ var divisor = array.from(
 
 dividx1 = divisor.binary_search_rightmost(close * step1p)
 step1 = divisor.get(dividx1)
-roundzone1 = step1 / 8
+//roundzone1 = step1 / 8
 
-// if barstate.islastconfirmedhistory
-//     debugLabelDn(str.format("{0}\n{1}\n{2}\n{3}",dividx1,step1,close*step1p,roundzone1))
-
-closeint1 = step1 * math.round(close / step1)
-highint1 = step1 * math.round(high / step1)
-lowint1 = step1 * math.round(low / step1)
+closeint_ceil = step1 * math.ceil(close / step1)
+closeint_floor = step1 * math.floor(close / step1)
+highint_floor = step1 * math.floor(high / step1)
+lowint_ceil = step1 * math.ceil(low / step1)
 
 
 value = volume == 0.0 ? na : volume * hl2
 
 
-vcum1m = math.sum(value, 2)
-vcum3m = math.sum(value, 6)
-vcum5m = math.sum(value, 10)
-vcum10m = math.sum(value, 20)
+vcum1m = math.sum(value, 2)     //  1 min
+vcum3m = math.sum(value, 6)     //  3 min
+vcum5m = math.sum(value, 10)    //  5 min
+vcum10m = math.sum(value, 20)   // 10 min
 
 [vp99m1,vp100m1] = request.security(syminfo.tickerid, "1", [
      ta.percentile_nearest_rank(value, p99m1bars, p99m1),
@@ -96,56 +91,67 @@ isvcum10m = vcum10m >= vp99m10
 
 isany = isvcum1m or isvcum3m or isvcum5m or isvcum10m or isvalueP100 or isvalueP99
 
-// var arrsteps = array.new<float>()
-//var arrsteps_h = array.new<float>()
-//var arrsteps_l = array.new<float>()
-var laststep_h = float(na)
-var laststep_l = float(na)
 
-stepchanged = switch
-    close > open => laststep_h != highint1 and math.abs(high-highint1) <= roundzone1
-    close < open => laststep_l != lowint1 and math.abs(low-lowint1) <= roundzone1
-    => false
+enum StateLevel
+    touched
+    crossed
 
-iisvalueP100 = (not isvalueP100[1] and isvalueP100) or (isvalueP100 and stepchanged)
-iisvalueP99 = (not isvalueP99[1] and isvalueP99) or (isvalueP99 and stepchanged)
-iisvcum1m = (not isvcum1m[1] and isvcum1m) or (isvcum1m and stepchanged)
-iisvcum3m = (not isvcum3m[1] and isvcum3m) or (isvcum3m and stepchanged)
-iisvcum5m = (not isvcum5m[1] and isvcum5m) or (isvcum5m and stepchanged)
-iisvcum10m = (not isvcum10m[1] and isvcum10m) or (isvcum10m and stepchanged)
-iisany = (not isany[1] and isany) or (isany and stepchanged)
+StateLevel state_high = na
+StateLevel state_low = na
 
-if isany and stepchanged
-    if close > open
-        debugLabelUp(str.format("{0}",highint1))
-    else if close < open
-        debugLabelDn(str.format("{0}",lowint1))
-    // else
-    //     debugLabelUp(str.format("{0}",closeint1))
+if closeint_ceil[2] < closeint_floor[1]  // close[2] < high[1] UP
+    txt = array.new<string>()
+    from_num = close[2] == closeint_ceil[2] ? closeint_ceil[2] + step1 : closeint_ceil[2]
+    to_num = closeint_floor[1]
+    for level = from_num to to_num by step1
+        txt.push(str.format("{0}",level))
+    debugLabelUp(txt.join(","),-1)
+else if close[2] < high[1] and closeint_ceil[2] == closeint_floor[1] and (low[1] < closeint_floor[1] and closeint_floor[1] < high[1])
+    debugLabelUp(str.format("{0}",closeint_floor[1]),-1)
 
-
-if math.abs(high-highint1) <= roundzone1
-    laststep_h := highint1
-if math.abs(low-lowint1) <= roundzone1
-    laststep_l := lowint1
+if closeint_floor[2] > closeint_ceil[1]  // close[2] > low[1] DN
+    txt = array.new<string>()
+    from_num = close[2] == closeint_floor[2] ? closeint_floor[2] - step1 : closeint_floor[2]
+    to_num = closeint_ceil[1]
+    for level = from_num to to_num by step1
+        txt.push(str.format("{0}",level))
+    debugLabelDn(txt.join(","),-1)
+else if close[2] > low[1] and closeint_floor[2] == closeint_ceil[1] and (low[1] < closeint_ceil[1] and closeint_ceil[1] < high[1])
+    debugLabelDn(str.format("{0}",closeint_ceil[1]),-1)
 
 
-// if isany
-    // if arrsteps.size() < 1
-    //     arrsteps.push(closeint1)
-    // else if arrsteps.last() != closeint1
-    //     arrsteps.push(closeint1)
+// //if math.abs(high-highint1) <= roundzone1
+// if high[1] > highint1[1]
+//     state_high := StateLevel.crossed
+// //if math.abs(low-lowint1) <= roundzone1
+// if low[1] < lowint1[1]
+//     state_low := StateLevel.crossed
 
-    // if arrsteps_h.size() < 1
-    //     arrsteps_h.push(highint1)
-    // else if arrsteps_h.last() != highint1 //and math.abs(high-highint1) < roundzone1
-    //     arrsteps_h.push(highint1)
 
-    // if arrsteps_l.size() < 1
-    //     arrsteps_l.push(lowint1)
-    // else if arrsteps_l.last() != lowint1 //and math.abs(low-lowint1) < roundzone1
-    //     arrsteps_l.push(lowint1)
-
+//var laststep_h = float(na)
+//var laststep_l = float(na)
+//stepchanged = switch
+//    close > open => laststep_h != highint1 and math.abs(high-highint1) <= roundzone1
+//    close < open => laststep_l != lowint1 and math.abs(low-lowint1) <= roundzone1
+//    => false
+//iisvalueP100 = (not isvalueP100[1] and isvalueP100) or (isvalueP100 and stepchanged)
+//iisvalueP99 = (not isvalueP99[1] and isvalueP99) or (isvalueP99 and stepchanged)
+//iisvcum1m = (not isvcum1m[1] and isvcum1m) or (isvcum1m and stepchanged)
+//iisvcum3m = (not isvcum3m[1] and isvcum3m) or (isvcum3m and stepchanged)
+//iisvcum5m = (not isvcum5m[1] and isvcum5m) or (isvcum5m and stepchanged)
+//iisvcum10m = (not isvcum10m[1] and isvcum10m) or (isvcum10m and stepchanged)
+//iisany = (not isany[1] and isany) or (isany and stepchanged)
+//if isany and stepchanged
+//    if close > open
+//        debugLabelUp(str.format("{0}",highint1))
+//    else if close < open
+//        debugLabelDn(str.format("{0}",lowint1))
+//    // else
+//    //     debugLabelUp(str.format("{0}",closeint1))
+//if math.abs(high-highint1) <= roundzone1
+//    laststep_h := highint1
+//if math.abs(low-lowint1) <= roundzone1
+//    laststep_l := lowint1
 
 
 colorplotvalue = switch
@@ -158,20 +164,20 @@ colorplotvalue = switch
     => color.new(color.gray, 75)
 
 bgcolorall = switch
-    iisvalueP100 => color.new(color.purple, 85)
-    iisvalueP99 => color.new(color.blue, 85)
-    iisvcum1m => color.new(color.gray, 85)
-    iisvcum3m => color.new(color.blue, 90)
+    isvalueP100 => color.new(color.purple, 85)
+    isvalueP99 => color.new(color.blue, 85)
+    isvcum1m => color.new(color.gray, 85)
+    isvcum3m => color.new(color.blue, 90)
     //isvcum5m => color.new(color.olive, 85)
     //isvcum10m => color.new(color.olive, 95)
     => na
 bgcolorall_1 = switch
-    iisvalueP100 => color.new(color.purple, 85)
-    iisvalueP99 => color.new(color.blue, 85)
-    iisvcum1m => color.new(color.gray, 85)
-    iisvcum3m => color.new(color.blue, 90)
-    iisvcum5m => color.new(color.olive, 85)
-    iisvcum10m => color.new(color.olive, 95)
+    isvalueP100 => color.new(color.purple, 85)
+    isvalueP99 => color.new(color.blue, 85)
+    isvcum1m => color.new(color.gray, 85)
+    isvcum3m => color.new(color.blue, 90)
+    isvcum5m => color.new(color.olive, 85)
+    isvcum10m => color.new(color.olive, 95)
     => na
 
 plot(value, color=colorplotvalue, style=plot.style_columns, title="Value")
