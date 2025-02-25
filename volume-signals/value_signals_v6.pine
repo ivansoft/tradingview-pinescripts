@@ -1,13 +1,19 @@
 //@version=6
 indicator("Volume Value", "value", format = format.volume, overlay = false)
 
-var int inputBarsPercentile = input.int(2000, "Bars Percentile", inline = "00")  // (2000/272 =~ 7 days, 5000/272 =~ 18)
+// value (5000, D, 5, 99.5, 15, 1, 97, 5000, 99.5, 3)
+
+var int inputBarsPercentile = input.int(2000, "Percentile Bars", inline = "00")  // (2000/272 =~ 7 days, 5000/272 =~ 18)
+var float inputPercentileP99 = input.float(99.5, "%", inline = "00")
 var string inputVwapAnchor = input.string("D", "VWAP", inline = "00")
-var int inputBarsCumulative = input.int(5, "Bars Cumulative", inline = "01")     // (10)
+var int inputBarsCumulative = input.int(5, "Cumulative Bars", inline = "01")     // (10)
 var float inputPercentileCumulative = input.float(99, "%", inline = "01")
-var string inputPeriodCumulativeH = input.string("15", "HTF Cum% Period", inline = "02")  // ("30")
-var int inputBarsCumulativeH = input.int(1, "Bars", inline = "02")
+var int inputBarsCumulativeH = input.int(1, "HTF Cumulative Bars", inline = "02")
+var string inputPeriodCumulativeH = input.string("15", "TF", inline = "02")  // ("30")
 var float inputPercentile50 = input.float(97, "Ignore Level P50", inline = "03")
+// int inputPricespikeBarsPercentile = input.int(1500, "Spike Percentile", inline = "04")
+// var float inputPricespikePercentileCumulative = input.float(99, "%", inline = "04")
+// var int inputPricespikeBarsCumulative = input.int(3, "Bars", inline = "04")
 var bool inputDefaultAllInvert = input.bool(false, "Invert On/Off All Inputs", group = "Show/Hide")
 var bool _inputShowValueLevels = input.bool(true, "Levels", group = "Show/Hide", inline = "0")
 var bool _inputShowValueLevelP99 = input.bool(true, "P99", group = "Show/Hide", inline = "0")
@@ -50,7 +56,7 @@ vvalue = request.security(syminfo.tickerid, "3", value, lookahead = barmerge.loo
 // p100 = ta.percentile_nearest_rank(value, inputBarsPercentile, 100)
 // p50 = ta.percentile_nearest_rank(value, inputBarsPercentile, inputPercentile50)
 [p99,p100,p50] = request.security(syminfo.tickerid, "3", [
-     ta.percentile_nearest_rank(value, inputBarsPercentile, 99),
+     ta.percentile_nearest_rank(value, inputBarsPercentile, inputPercentileP99),
      ta.percentile_nearest_rank(value, inputBarsPercentile, 100),
      ta.percentile_nearest_rank(value, inputBarsPercentile, inputPercentile50)
      ], lookahead = barmerge.lookahead_on)
@@ -132,6 +138,24 @@ calcdayopen() =>
 dayopen = calcdayopen()
 deltaopen = (close - dayopen) / dayopen
 
+
+// pricechange = nz(math.max(
+//      math.abs(open-close),
+//      math.abs(open-close[1]),
+//      math.abs(close-close[1])
+//  ))
+// pricechange_pos = close > open or close > close[1] ? pricechange : 0
+// pricechange_neg = close < open or close < close[1] ? pricechange : 0
+// pricechangecum_pos = math.sum(pricechange_pos, inputPricespikeBarsCumulative)
+// pricechangecum_neg = math.sum(pricechange_neg, inputPricespikeBarsCumulative)
+// pricechangecum_posp99 = ta.percentile_nearest_rank(pricechangecum_pos, inputPricespikeBarsPercentile, inputPricespikePercentileCumulative)
+// pricechangecum_negp99 = ta.percentile_nearest_rank(pricechangecum_neg, inputPricespikeBarsPercentile, inputPricespikePercentileCumulative)
+// impulse_up = pricechangecum_pos >= pricechangecum_posp99
+// impulse_dn = pricechangecum_neg >= pricechangecum_negp99
+
+// plotchar(impulse_up, char = "v", location = location.abovebar, color = color.new(color.red,50), size = size.tiny, force_overlay = true)
+// plotchar(impulse_dn, char = "^", location = location.belowbar, color = color.new(color.green,0), size = size.tiny, force_overlay = true)
+
 // if bar_index % 30 == 0
 //     debugLabelDn(str.format("{0,number,#.#}\n{1,number,#.#}", deltavwap*100, deltaopen*100))
 
@@ -143,13 +167,14 @@ strPrice(float v) =>
     str.format("{0,number,"+"#."+_strPriceScale+"}",v)
 strVolume(float v, string big="M") =>
     format = switch big
-        "M" => str.format("{0,number,integer}M", v /    1000000)
-        "B" => str.format("{0,number,integer}B", v / 1000000000)
+        "B" => str.format("{0,number,#.##}B", v / 1000000000)
+        "M" => str.format("{0,number,#.##}M", v /    1000000)
     format
 strPercent(float v) =>
     str.format("{0,number,#.#}%", v*100)
 strUpDn(float v) => v > 0 ? "Up" : v < 0 ? "Dn" : "Flat"
-
+strImpulse() =>
+    ""
 
 varip triggrered = map.new<string,bool>()
 if barstate.isnew
@@ -160,22 +185,22 @@ trig(v) => triggrered.put(v,true)
 
 varip float tickprice = na
 // debug
-var tickdebug = debugLabelDn("")
-label.set_text(tickdebug, str.format("{0}",tickprice))
-label.set_point(tickdebug, chart.point.now(low))
+// var tickdebug = debugLabelDn("")
+// label.set_text(tickdebug, str.format("{0}",tickprice))
+// label.set_point(tickdebug, chart.point.now(low))
 
 if isvalueP100 and notrig("huge")
-    alert(str.format( "{0} 3min Huge Volume {1} : {2}->{3} D {4} VWAP {5} Tick {6} {7}", syminfo.ticker, strVolume(value,"B"), strPrice(close[1]), strPrice(close), strPercent(deltaopen), strPercent(deltavwap), strUpDn(close-tickprice), istrig("big")?" SAME":"" ), alert.freq_all)
+    alert(str.format( "{0} 3min Huge Volume {1} : {2}->{3} D {4} VWAP {5} {6} {7}", syminfo.ticker, strVolume(value,"B"), strPrice(close[1]), strPrice(close), strPercent(deltaopen), strPercent(deltavwap), strUpDn(oc2-oc2[1]), istrig("big")?" SAME":"" ), alert.freq_all)
     trig("huge")
 if isvalueP99 and notrig("big")
-    alert(str.format( "{0} 3min Big Volume {1} : {2}->{3} D {4} VWAP {5} Tick {6}", syminfo.ticker, strVolume(value,"B"), strPrice(close[1]), strPrice(close), strPercent(deltaopen), strPercent(deltavwap), strUpDn(close-tickprice) ), alert.freq_all)
+    alert(str.format( "{0} 3min Big Volume {1} : {2}->{3} D {4} VWAP {5} {6}", syminfo.ticker, strVolume(value,"B"), strPrice(close[1]), strPrice(close), strPercent(deltaopen), strPercent(deltavwap), strUpDn(oc2-oc2[1]) ), alert.freq_all)
     trig("big")
 if isvcumP99 and isvalueP50 and notrig("cum")
     if isvcumP99[1]
-        alert(str.format( "{0} Cumulative Volume {1} : {2}->{3} D {4} VWAP {5} Tick {6} {7}", syminfo.ticker, strVolume(vcum,"B"), strPrice(close[1]), strPrice(close), strPercent(deltaopen), strPercent(deltavwap), strUpDn(close-tickprice), "CONTINUE" ), alert.freq_all)
+        alert(str.format( "{0} Cumulative Volume {1} : {2}->{3} D {4} VWAP {5} {6} {7}", syminfo.ticker, strVolume(vcum,"B"), strPrice(close[1]), strPrice(close), strPercent(deltaopen), strPercent(deltavwap), strUpDn(oc2-oc2[1]), "CONTINUE" ), alert.freq_all)
         trig("cum")
     else //new
-        alert(str.format( "{0} Cumulative Volume {1} : {2}->{3} D {4} VWAP {5} Tick {6} {7}", syminfo.ticker, strVolume(vcum,"B"), strPrice(close[1]), strPrice(close), strPercent(deltaopen), strPercent(deltavwap), strUpDn(close-tickprice), "FIRST" ), alert.freq_all)
+        alert(str.format( "{0} Cumulative Volume {1} : {2}->{3} D {4} VWAP {5} {6} {7}", syminfo.ticker, strVolume(vcum,"B"), strPrice(close[1]), strPrice(close), strPercent(deltaopen), strPercent(deltavwap), strUpDn(oc2-oc2[1]), "FIRST" ), alert.freq_all)
         trig("cum")
 
 tickprice := close
