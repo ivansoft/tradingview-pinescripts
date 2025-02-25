@@ -43,6 +43,8 @@ dividx1 = divisor.binary_search_rightmost(close * step1p)
 step1 = divisor.get(dividx1)
 //roundzone1 = step1 / 8
 
+openint_ceil = step1 * math.ceil(open / step1)
+openint_floor = step1 * math.floor(open / step1)
 closeint_ceil = step1 * math.ceil(close / step1)
 closeint_floor = step1 * math.floor(close / step1)
 highint_floor = step1 * math.floor(high / step1)
@@ -108,9 +110,18 @@ if barstate.isconfirmed
         for level = from_num to to_num by step1
             txt.push(str.format("{0}",level))
         debugLabelUp(txt.join(","))
+    else if closeint_ceil[1] < openint_floor
+        txt = array.new<string>()
+        from_num = close[1] == closeint_ceil[1] ? closeint_ceil[1] + step1 : closeint_ceil[1]
+        to_num = openint_floor
+        for level = from_num to to_num by step1
+            txt.push(str.format("{0}",level))
+        debugLabelUp(txt.join(","))
     else if close[1] < high and closeint_ceil[1] == closeint_floor and (open <= closeint_floor and closeint_floor < close)
         debugLabelUp(str.format("{0}",closeint_floor))
-
+    else if close[1] < high and closeint_ceil[1] == openint_floor and (close <= openint_floor and openint_floor < open)
+        debugLabelUp(str.format("{0}",openint_floor))
+    
     if closeint_floor[1] > closeint_ceil  // CROSSED DN
         txt = array.new<string>()
         from_num = close[1] == closeint_floor[1] ? closeint_floor[1] - step1 : closeint_floor[1]
@@ -118,8 +129,17 @@ if barstate.isconfirmed
         for level = from_num to to_num by step1
             txt.push(str.format("{0}",level))
         debugLabelDn(txt.join(","))
+    else if closeint_floor[1] > openint_ceil
+        txt = array.new<string>()
+        from_num = close[1] == closeint_floor[1] ? closeint_floor[1] - step1 : closeint_floor[1]
+        to_num = openint_ceil
+        for level = from_num to to_num by step1
+            txt.push(str.format("{0}",level))
+        debugLabelDn(txt.join(","))
     else if close[1] > low and closeint_floor[1] == closeint_ceil and (close < closeint_ceil and closeint_ceil <= open)
         debugLabelDn(str.format("{0}",closeint_ceil))
+    else if close[1] > low and closeint_floor[1] == openint_ceil and (open < openint_ceil and openint_ceil <= close)
+        debugLabelDn(str.format("{0}",openint_ceil))
 
 
     if close <= highint_floor and open <= highint_floor and low < highint_floor
@@ -201,4 +221,3 @@ plot(value, color=colorplotvalue, style=plot.style_columns, title="Value")
 bgcolor(bgcolorall_1, editable = false, display = dispBg ? display.all : display.none)
 bgcolor(bgcolorall, editable = false, display = dispBg ? display.all : display.none, force_overlay = true)
 
-s
