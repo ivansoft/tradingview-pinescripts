@@ -1,0 +1,63 @@
+//@version=6
+indicator("Volume Value", "value", format = format.volume, overlay = false, timeframe="30S")
+
+
+p99bars = input.int(5000, "30S P99 Bars", inline = "00")
+p99 = input.float(99.5, "%", inline = "00")
+
+p99m1bars = input.int(2000, "1m P99 Bars", inline = "00")
+p99m1 = input.float(99.5, "%", inline = "00")
+
+p99m3bars = input.int(1000, "3m P99 Bars", inline = "01")
+p99m3 = input.float(99.5, "%", inline = "01")
+
+//cumSize = input.int(2, "Cum Size", inline = "02")
+
+dispBg = input.bool(true, "Background Highlights", group = "Show/Hide")
+
+
+value = volume == 0.0 ? na : volume * hl2
+
+
+vcum1m = math.sum(value, 2)
+vcum3m = math.sum(value, 6)
+
+[vp99m1,vp100m1] = request.security(syminfo.tickerid, "1", [
+     ta.percentile_nearest_rank(value, p99m1bars, p99m1),
+     ta.percentile_nearest_rank(value, p99m1bars, 100)
+     ], lookahead = barmerge.lookahead_on)
+
+[vp99m3,vp100m3] = request.security(syminfo.tickerid, "3", [
+     ta.percentile_nearest_rank(value, p99m3bars, p99m3),
+     ta.percentile_nearest_rank(value, p99m3bars, 100)
+     ], lookahead = barmerge.lookahead_on)
+
+vp99 = ta.percentile_nearest_rank(value, p99bars, p99)
+vp100 = ta.percentile_nearest_rank(value, p99bars, 100)
+
+
+isvalueP100 = value >= p100
+isvalueP99 = value >= p99
+
+isvcum1m = vcum1m >= vp99m1
+isvcum3m = vcum3m >= vp99m3
+
+colorplotvalue = switch
+    isvalueP100 => color.new(color.purple, 50)
+    isvalueP99 => color.new(color.blue, 50)
+    isvcum3m => color.new(color.blue, 50)
+    isvcum1m => color.new(color.gray, 50)
+    => color.new(color.gray, 75)
+
+bgcolorall = switch
+    isvalueP100 => color.new(color.purple, 85)
+    isvalueP99 => color.new(color.blue, 85)
+    isvcum3m => color.new(color.blue, 85)
+    isvcum1m => color.new(color.gray, 85)
+    => na
+
+plot(value, color=colorplotvalue, style=plot.style_columns, title="Value")
+
+bgcolor(bgcolorall, editable = false, display = dispBg ? display.all : display.none)
+bgcolor(bgcolorall, editable = false, display = dispBg ? display.all : display.none, force_overlay = true)
+
