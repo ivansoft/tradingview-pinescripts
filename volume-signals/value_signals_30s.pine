@@ -2,14 +2,20 @@
 indicator("Volume Value", "value", format = format.volume, overlay = false, timeframe="30S")
 
 
-p99bars = input.int(5000, "30S P99 Bars", inline = "00")
-p99 = input.float(99.5, "%", inline = "00")
+p99bars = input.int(5000, "30S P99 Bars", inline = "000")
+p99 = input.float(99.5, "%", inline = "000")
 
-p99m1bars = input.int(2000, "1m P99 Bars", inline = "00")
-p99m1 = input.float(99.5, "%", inline = "00")
+p99m1bars = input.int(2000, "1m P99 Bars", inline = "001")
+p99m1 = input.float(99.5, "%", inline = "001")
 
-p99m3bars = input.int(1000, "3m P99 Bars", inline = "01")
-p99m3 = input.float(99.5, "%", inline = "01")
+p99m3bars = input.int(1000, "3m P99 Bars", inline = "003")
+p99m3 = input.float(99.5, "%", inline = "003")
+
+p99m5bars = input.int(1000, "5m P99 Bars", inline = "005")
+p99m5 = input.float(99.5, "%", inline = "005")
+
+p99m10bars = input.int(1000, "10m P99 Bars", inline = "010")
+p99m10 = input.float(99.5, "%", inline = "010")
 
 //cumSize = input.int(2, "Cum Size", inline = "02")
 
@@ -21,6 +27,8 @@ value = volume == 0.0 ? na : volume * hl2
 
 vcum1m = math.sum(value, 2)
 vcum3m = math.sum(value, 6)
+vcum5m = math.sum(value, 10)
+vcum10m = math.sum(value, 20)
 
 [vp99m1,vp100m1] = request.security(syminfo.tickerid, "1", [
      ta.percentile_nearest_rank(value, p99m1bars, p99m1),
@@ -32,28 +40,44 @@ vcum3m = math.sum(value, 6)
      ta.percentile_nearest_rank(value, p99m3bars, 100)
      ], lookahead = barmerge.lookahead_on)
 
+[vp99m5,vp100m5] = request.security(syminfo.tickerid, "5", [
+     ta.percentile_nearest_rank(value, p99m5bars, p99m5),
+     ta.percentile_nearest_rank(value, p99m5bars, 100)
+     ], lookahead = barmerge.lookahead_on)
+
+[vp99m10,vp100m10] = request.security(syminfo.tickerid, "10", [
+     ta.percentile_nearest_rank(value, p99m10bars, p99m10),
+     ta.percentile_nearest_rank(value, p99m10bars, 100)
+     ], lookahead = barmerge.lookahead_on)
+
 vp99 = ta.percentile_nearest_rank(value, p99bars, p99)
 vp100 = ta.percentile_nearest_rank(value, p99bars, 100)
 
 
-isvalueP100 = value >= p100
-isvalueP99 = value >= p99
+isvalueP100 = value >= vp100
+isvalueP99 = value >= vp99
 
 isvcum1m = vcum1m >= vp99m1
 isvcum3m = vcum3m >= vp99m3
+isvcum5m = vcum5m >= vp99m5
+isvcum10m = vcum10m >= vp99m10
 
 colorplotvalue = switch
     isvalueP100 => color.new(color.purple, 50)
     isvalueP99 => color.new(color.blue, 50)
-    isvcum3m => color.new(color.blue, 50)
     isvcum1m => color.new(color.gray, 50)
+    isvcum3m => color.new(color.blue, 50)
+    isvcum5m => color.new(color.olive, 50)
+    isvcum10m => color.new(color.olive, 50)
     => color.new(color.gray, 75)
 
 bgcolorall = switch
     isvalueP100 => color.new(color.purple, 85)
     isvalueP99 => color.new(color.blue, 85)
-    isvcum3m => color.new(color.blue, 85)
     isvcum1m => color.new(color.gray, 85)
+    isvcum3m => color.new(color.blue, 85)
+    isvcum5m => color.new(color.olive, 85)
+    isvcum10m => color.new(color.olive, 85)
     => na
 
 plot(value, color=colorplotvalue, style=plot.style_columns, title="Value")
