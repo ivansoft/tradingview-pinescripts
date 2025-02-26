@@ -98,6 +98,7 @@ enum StateLevel
     reached
     touched
     crossed
+    crossed_multiple
 
 StateLevel state_up = na
 StateLevel state_dn = na
@@ -128,15 +129,13 @@ if barstate.isconfirmed
         to_num = closeint_floor
         for level = from_num to to_num by step1
             txt.push(str.format("{0}@",level))
-        //debugLabelUp(txt.join(","))
-        state_up := StateLevel.crossed
+        state_up := txt.size() > 1 ? StateLevel.crossed_multiple : StateLevel.crossed
     else if closeint_ceil[1] < openint_floor
         from_num = close[1] == closeint_ceil[1] ? closeint_ceil[1] + step1 : closeint_ceil[1]
         to_num = openint_floor
         for level = from_num to to_num by step1
             txt.push(str.format("{0}@",level))
-        //debugLabelUp(txt.join(","))
-        state_up := StateLevel.crossed
+        state_up := txt.size() > 1 ? StateLevel.crossed_multiple : StateLevel.crossed
     else if closeint_ceil[1] == closeint_floor and lastdirection(closeint_floor) < 0 and
          (close[1] < close) and
          (close[1] <= closeint_ceil[1] and closeint_ceil[1] < close)
@@ -153,15 +152,13 @@ if barstate.isconfirmed
         to_num = closeint_ceil
         for level = from_num to to_num by step1
             txt.push(str.format("{0}@",level))
-        //debugLabelDn(txt.join(","))
-        state_dn := StateLevel.crossed
+        state_dn := txt.size() > 1 ? StateLevel.crossed_multiple : StateLevel.crossed
     else if closeint_floor[1] > openint_ceil
         from_num = close[1] == closeint_floor[1] ? closeint_floor[1] - step1 : closeint_floor[1]
         to_num = openint_ceil
         for level = from_num to to_num by step1
             txt.push(str.format("{0}@",level))
-        //debugLabelDn(txt.join(","))
-        state_dn := StateLevel.crossed
+        state_dn := txt.size() > 1 ? StateLevel.crossed_multiple : StateLevel.crossed
     else if closeint_floor[1] == closeint_ceil and lastdirection(closeint_ceil) > 0 and
          (close[1] > close) and
          (close < closeint_floor[1] and closeint_floor[1] <= close[1])
@@ -194,9 +191,15 @@ if barstate.isconfirmed
 
 // if isany
 switch state_up
+    // StateLevel.crossed_multiple => debugLabelUp(txt.join(","))
     StateLevel.crossed => debugLabelUp(txt.join(","))
+    // StateLevel.reached => debugLabelUp(txt.join(","))
+    // StateLevel.touched => debugLabelUp(txt.join(","))
 switch state_dn
+    // StateLevel.crossed_multiple => debugLabelDn(txt.join(","))
     StateLevel.crossed => debugLabelDn(txt.join(","))
+    // StateLevel.reached => debugLabelDn(txt.join(","))
+    // StateLevel.touched => debugLabelDn(txt.join(","))
 
 
 
