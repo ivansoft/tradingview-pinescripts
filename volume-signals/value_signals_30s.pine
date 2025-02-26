@@ -41,14 +41,18 @@ var divisor = array.from(
 
 dividx1 = divisor.binary_search_rightmost(close * step1p)
 step1 = divisor.get(dividx1)
-//roundzone1 = step1 / 8
+roundzone1 = step1 / 8
 
 openint_ceil = step1 * math.ceil(open / step1)
 openint_floor = step1 * math.floor(open / step1)
 closeint_ceil = step1 * math.ceil(close / step1)
 closeint_floor = step1 * math.floor(close / step1)
+
 highint_floor = step1 * math.floor(high / step1)
 lowint_ceil = step1 * math.ceil(low / step1)
+
+highint_ceil = step1 * math.floor(high / step1)
+lowint_floor = step1 * math.ceil(low / step1)
 
 
 value = volume == 0.0 ? na : volume * hl2
@@ -95,6 +99,7 @@ isany = isvcum1m or isvcum3m or isvcum5m or isvcum10m or isvalueP100 or isvalueP
 
 
 enum StateLevel
+    near
     reached
     touched
     crossed
@@ -120,7 +125,7 @@ lvl(l) =>
         1 => "%"
         -1 => "#"
         0 => "0"
-    
+
 
 if barstate.isconfirmed
 
@@ -146,7 +151,7 @@ if barstate.isconfirmed
          (close[1] <= closeint_ceil[1] and closeint_ceil[1] < open)
         txt.push(str.format("{0}*{1}",openint_floor,lvl(openint_floor)))
         state_up := StateLevel.crossed
-    
+
     if closeint_floor[1] > closeint_ceil  // CROSSED DN
         from_num = close[1] == closeint_floor[1] ? closeint_floor[1] - step1 : closeint_floor[1]
         to_num = closeint_ceil
@@ -171,35 +176,47 @@ if barstate.isconfirmed
         state_dn := StateLevel.crossed
 
 
-    if math.max(close, open) <= highint_floor and low < highint_floor
+    if highint_ceil - high < roundzone1
+        if lastdirection(highint_ceil) < 0
+            txt.push(str.format("under {0}",highint_ceil))
+            state_up := StateLevel.near
+
+    if low - lowint_floor < roundzone1
+        if lastdirection(lowint_floor) > 0
+            txt.push(str.format("above {0}",lowint_floor))
+            state_up := StateLevel.near
+
+    if low < highint_floor and math.max(close, open) <= highint_floor
         if lastdirection(highint_floor) < 0
             if high > highint_floor
                 txt.push(str.format("touched {0}",highint_floor))
                 state_up := StateLevel.touched
             else
-                txt.push(str.format("under {0}",highint_floor))
+                txt.push(str.format("hit {0}",highint_floor))
                 state_up := StateLevel.reached
 
-    if math.min(close, open) >= lowint_ceil and high > lowint_ceil
+    if high > lowint_ceil and math.min(close, open) >= lowint_ceil
         if lastdirection(lowint_ceil) > 0
             if low < lowint_ceil
                 txt.push(str.format("touched {0}",lowint_ceil))
                 state_dn := StateLevel.touched
             else
-                txt.push(str.format("above {0}",lowint_ceil))
+                txt.push(str.format("hit {0}",lowint_ceil))
                 state_dn := StateLevel.reached
 
 // if isany
 switch state_up
-    // StateLevel.crossed_multiple => debugLabelUp(txt.join(","))
-    StateLevel.crossed => debugLabelUp(txt.join(","))
-    // StateLevel.reached => debugLabelUp(txt.join(","))
-    // StateLevel.touched => debugLabelUp(txt.join(","))
+    //StateLevel.crossed_multiple => debugLabelUp(txt.join(","))
+    //StateLevel.crossed => debugLabelUp(txt.join(","))
+    //StateLevel.reached => debugLabelUp(txt.join(","))
+    //StateLevel.touched => debugLabelUp(txt.join(","))
+    StateLevel.near => debugLabelUp(txt.join(","))
 switch state_dn
-    // StateLevel.crossed_multiple => debugLabelDn(txt.join(","))
-    StateLevel.crossed => debugLabelDn(txt.join(","))
-    // StateLevel.reached => debugLabelDn(txt.join(","))
-    // StateLevel.touched => debugLabelDn(txt.join(","))
+    //StateLevel.crossed_multiple => debugLabelDn(txt.join(","))
+    //StateLevel.crossed => debugLabelDn(txt.join(","))
+    //StateLevel.reached => debugLabelDn(txt.join(","))
+    //StateLevel.touched => debugLabelDn(txt.join(","))
+    StateLevel.near => debugLabelDn(txt.join(","))
 
 
 
