@@ -95,99 +95,78 @@ isany = isvcum1m or isvcum3m or isvcum5m or isvcum10m or isvalueP100 or isvalueP
 
 
 enum StateLevel
+    reached
     touched
     crossed
 
-StateLevel state_high = na
-StateLevel state_low = na
+StateLevel state_up = na
+StateLevel state_dn = na
+txt = array.new<string>()
 
 if barstate.isconfirmed
 
     if closeint_ceil[1] < closeint_floor  // CROSSED UP
-        txt = array.new<string>()
         from_num = close[1] == closeint_ceil[1] ? closeint_ceil[1] + step1 : closeint_ceil[1]
         to_num = closeint_floor
         for level = from_num to to_num by step1
             txt.push(str.format("{0}",level))
-        debugLabelUp(txt.join(","))
+        state_up := StateLevel.crossed
     else if closeint_ceil[1] < openint_floor
-        txt = array.new<string>()
         from_num = close[1] == closeint_ceil[1] ? closeint_ceil[1] + step1 : closeint_ceil[1]
         to_num = openint_floor
         for level = from_num to to_num by step1
             txt.push(str.format("{0}",level))
-        debugLabelUp(txt.join(","))
+        state_up := StateLevel.crossed
     else if close[1] < high and closeint_ceil[1] == closeint_floor and (open <= closeint_floor and closeint_floor < close)
-        debugLabelUp(str.format("{0}",closeint_floor))
+        txt.push(str.format("{0}",closeint_floor))
+        state_up := StateLevel.crossed
     else if close[1] < high and closeint_ceil[1] == openint_floor and (close <= openint_floor and openint_floor < open)
-        debugLabelUp(str.format("{0}",openint_floor))
+        txt.push(str.format("{0}",openint_floor))
+        state_up := StateLevel.crossed
     
     if closeint_floor[1] > closeint_ceil  // CROSSED DN
-        txt = array.new<string>()
         from_num = close[1] == closeint_floor[1] ? closeint_floor[1] - step1 : closeint_floor[1]
         to_num = closeint_ceil
         for level = from_num to to_num by step1
             txt.push(str.format("{0}",level))
-        debugLabelDn(txt.join(","))
+        state_dn := StateLevel.crossed
     else if closeint_floor[1] > openint_ceil
-        txt = array.new<string>()
         from_num = close[1] == closeint_floor[1] ? closeint_floor[1] - step1 : closeint_floor[1]
         to_num = openint_ceil
         for level = from_num to to_num by step1
             txt.push(str.format("{0}",level))
-        debugLabelDn(txt.join(","))
+        state_dn := StateLevel.crossed
     else if close[1] > low and closeint_floor[1] == closeint_ceil and (close < closeint_ceil and closeint_ceil <= open)
-        debugLabelDn(str.format("{0}",closeint_ceil))
+        txt.push(str.format("{0}",closeint_ceil))
+        state_dn := StateLevel.crossed
     else if close[1] > low and closeint_floor[1] == openint_ceil and (open < openint_ceil and openint_ceil <= close)
-        debugLabelDn(str.format("{0}",openint_ceil))
+        txt.push(str.format("{0}",openint_ceil))
+        state_dn := StateLevel.crossed
 
 
     if close <= highint_floor and open <= highint_floor and low < highint_floor
         if high > highint_floor and close[1] <= highint_floor and open[1] <= highint_floor
-            debugLabelUp(str.format("touched {0}", highint_floor))
+            txt.push(str.format("touched {0}",highint_floor))
+            state_up := StateLevel.touched
         else
-            debugLabelUp(str.format("under {0}", highint_floor))
+            txt.push(str.format("under {0}",highint_floor))
+            state_up := StateLevel.reached
 
     if close >= lowint_ceil and open >= lowint_ceil and high > lowint_ceil
         if low < lowint_ceil and close[1] >= lowint_ceil and open[1] >= lowint_ceil
-            debugLabelDn(str.format("touched {0}", lowint_ceil))
+            txt.push(str.format("touched {0}",lowint_ceil))
+            state_dn := StateLevel.touched
         else
-            debugLabelDn(str.format("above {0}", lowint_ceil))
+            txt.push(str.format("above {0}",lowint_ceil))
+            state_dn := StateLevel.reached
 
 
+if isany
+    switch state_up
+        StateLevel.crossed => debugLabelUp(txt.join(","))
+    switch state_dn
+        StateLevel.crossed => debugLabelDn(txt.join(","))
 
-// //if math.abs(high-highint1) <= roundzone1
-// if high[1] > highint1[1]
-//     state_high := StateLevel.crossed
-// //if math.abs(low-lowint1) <= roundzone1
-// if low[1] < lowint1[1]
-//     state_low := StateLevel.crossed
-
-
-//var laststep_h = float(na)
-//var laststep_l = float(na)
-//stepchanged = switch
-//    close > open => laststep_h != highint1 and math.abs(high-highint1) <= roundzone1
-//    close < open => laststep_l != lowint1 and math.abs(low-lowint1) <= roundzone1
-//    => false
-//iisvalueP100 = (not isvalueP100[1] and isvalueP100) or (isvalueP100 and stepchanged)
-//iisvalueP99 = (not isvalueP99[1] and isvalueP99) or (isvalueP99 and stepchanged)
-//iisvcum1m = (not isvcum1m[1] and isvcum1m) or (isvcum1m and stepchanged)
-//iisvcum3m = (not isvcum3m[1] and isvcum3m) or (isvcum3m and stepchanged)
-//iisvcum5m = (not isvcum5m[1] and isvcum5m) or (isvcum5m and stepchanged)
-//iisvcum10m = (not isvcum10m[1] and isvcum10m) or (isvcum10m and stepchanged)
-//iisany = (not isany[1] and isany) or (isany and stepchanged)
-//if isany and stepchanged
-//    if close > open
-//        debugLabelUp(str.format("{0}",highint1))
-//    else if close < open
-//        debugLabelDn(str.format("{0}",lowint1))
-//    // else
-//    //     debugLabelUp(str.format("{0}",closeint1))
-//if math.abs(high-highint1) <= roundzone1
-//    laststep_h := highint1
-//if math.abs(low-lowint1) <= roundzone1
-//    laststep_l := lowint1
 
 
 colorplotvalue = switch
