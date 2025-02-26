@@ -25,6 +25,8 @@ p99m10 = input.float(99.5, "%", inline = "010")
 var float step1p = input.float(0.5, "step x1 %", inline = "1") / 100  // 0.5 %
 var float step10p = input.float(5, "step x10 %", inline = "1") / 100  // 5 %
 
+var float zonediv = input.float(8, "Level zone (1/x)", inline = "2")
+
 dispBg = input.bool(true, "Background Highlights", group = "Show/Hide")
 
 
@@ -41,7 +43,7 @@ var divisor = array.from(
 
 dividx1 = divisor.binary_search_rightmost(close * step1p)
 step1 = divisor.get(dividx1)
-roundzone1 = step1 / 8
+roundzone1 = step1 / zonediv
 
 openint_ceil = step1 * math.ceil(open / step1)
 openint_floor = step1 * math.floor(open / step1)
@@ -51,8 +53,8 @@ closeint_floor = step1 * math.floor(close / step1)
 highint_floor = step1 * math.floor(high / step1)
 lowint_ceil = step1 * math.ceil(low / step1)
 
-highint_ceil = step1 * math.floor(high / step1)
-lowint_floor = step1 * math.ceil(low / step1)
+highint_ceil = step1 * math.ceil(high / step1)
+lowint_floor = step1 * math.floor(low / step1)
 
 
 value = volume == 0.0 ? na : volume * hl2
@@ -176,17 +178,17 @@ if barstate.isconfirmed
         state_dn := StateLevel.crossed
 
 
-    if highint_ceil - high < roundzone1
+    if highint_ceil - math.max(close, open) < roundzone1
         if lastdirection(highint_ceil) < 0
             txt.push(str.format("under {0}",highint_ceil))
             state_up := StateLevel.near
 
-    if low - lowint_floor < roundzone1
+    if math.min(close, open) - lowint_floor < roundzone1
         if lastdirection(lowint_floor) > 0
             txt.push(str.format("above {0}",lowint_floor))
-            state_up := StateLevel.near
+            state_dn := StateLevel.near
 
-    if low < highint_floor and math.max(close, open) <= highint_floor
+    if (low < highint_floor and highint_floor <= high) and math.max(close, open) <= highint_floor
         if lastdirection(highint_floor) < 0
             if high > highint_floor
                 txt.push(str.format("touched {0}",highint_floor))
@@ -195,7 +197,7 @@ if barstate.isconfirmed
                 txt.push(str.format("hit {0}",highint_floor))
                 state_up := StateLevel.reached
 
-    if high > lowint_ceil and math.min(close, open) >= lowint_ceil
+    if (low <= lowint_ceil and lowint_ceil < high) and math.min(close, open) >= lowint_ceil
         if lastdirection(lowint_ceil) > 0
             if low < lowint_ceil
                 txt.push(str.format("touched {0}",lowint_ceil))
