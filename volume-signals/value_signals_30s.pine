@@ -103,69 +103,100 @@ StateLevel state_up = na
 StateLevel state_dn = na
 txt = array.new<string>()
 
+
+lastdirection(baseprice,lookback=14) =>
+    result = 0
+    for i = 1 to lookback
+        if close[i] > baseprice
+            result := 1
+            break
+        else if close[i] < baseprice
+            result := -1
+            break
+    result
+lvl(l) =>
+    switch lastdirection(l)
+        1 => "%"
+        -1 => "#"
+        0 => "0"
+    
+
 if barstate.isconfirmed
 
     if closeint_ceil[1] < closeint_floor  // CROSSED UP
         from_num = close[1] == closeint_ceil[1] ? closeint_ceil[1] + step1 : closeint_ceil[1]
         to_num = closeint_floor
         for level = from_num to to_num by step1
-            txt.push(str.format("{0}",level))
+            txt.push(str.format("{0}@",level))
         state_up := StateLevel.crossed
     else if closeint_ceil[1] < openint_floor
         from_num = close[1] == closeint_ceil[1] ? closeint_ceil[1] + step1 : closeint_ceil[1]
         to_num = openint_floor
         for level = from_num to to_num by step1
-            txt.push(str.format("{0}",level))
+            txt.push(str.format("{0}@",level))
         state_up := StateLevel.crossed
-    else if close[1] < high and closeint_ceil[1] == closeint_floor and (open <= closeint_floor and closeint_floor < close)
-        txt.push(str.format("{0}",closeint_floor))
+    else if closeint_ceil[1] == closeint_floor and lastdirection(closeint_floor) < 0 and
+         (close[1] < close) and  // open <= closeint_ceil[1]
+         (close[1] <= closeint_ceil[1] and closeint_ceil[1] < close) // and not (close[1] == closeint_ceil[1] and close[1] == open))
+         //(open <= closeint_ceil[1] and closeint_ceil[1] < close))
+        txt.push(str.format("{0}^{1}",closeint_floor,lvl(closeint_floor)))
         state_up := StateLevel.crossed
-    else if close[1] < high and closeint_ceil[1] == openint_floor and (close <= openint_floor and openint_floor < open)
-        txt.push(str.format("{0}",openint_floor))
+    else if closeint_ceil[1] == openint_floor and lastdirection(openint_floor) < 0 and
+         (close[1] < open) and // close < closeint_ceil[1]
+         (close[1] <= closeint_ceil[1] and closeint_ceil[1] < open)
+        txt.push(str.format("{0}*{1}",openint_floor,lvl(openint_floor)))
         state_up := StateLevel.crossed
     
     if closeint_floor[1] > closeint_ceil  // CROSSED DN
         from_num = close[1] == closeint_floor[1] ? closeint_floor[1] - step1 : closeint_floor[1]
         to_num = closeint_ceil
         for level = from_num to to_num by step1
-            txt.push(str.format("{0}",level))
+            txt.push(str.format("{0}@",level))
         state_dn := StateLevel.crossed
     else if closeint_floor[1] > openint_ceil
         from_num = close[1] == closeint_floor[1] ? closeint_floor[1] - step1 : closeint_floor[1]
         to_num = openint_ceil
         for level = from_num to to_num by step1
-            txt.push(str.format("{0}",level))
+            txt.push(str.format("{0}@",level))
         state_dn := StateLevel.crossed
-    else if close[1] > low and closeint_floor[1] == closeint_ceil and (close < closeint_ceil and closeint_ceil <= open)
-        txt.push(str.format("{0}",closeint_ceil))
+    else if closeint_floor[1] == closeint_ceil and lastdirection(closeint_ceil) > 0 and
+         (close[1] > close) and
+         (close < closeint_floor[1] and closeint_floor[1] <= close[1])
+         //(close < closeint_floor[1] and closeint_floor[1] <= open))
+        txt.push(str.format("{0}v{1}",closeint_ceil,lvl(closeint_ceil)))
         state_dn := StateLevel.crossed
-    else if close[1] > low and closeint_floor[1] == openint_ceil and (open < openint_ceil and openint_ceil <= close)
-        txt.push(str.format("{0}",openint_ceil))
+    else if closeint_floor[1] == openint_ceil and lastdirection(closeint_ceil) > 0 and
+         (close[1] > open) and
+         (open < closeint_floor[1] and closeint_floor[1] <= close[1])
+        txt.push(str.format("{0}*{1}",openint_ceil,lvl(closeint_ceil)))
         state_dn := StateLevel.crossed
 
 
-    if close <= highint_floor and open <= highint_floor and low < highint_floor
-        if high > highint_floor and close[1] <= highint_floor and open[1] <= highint_floor
-            txt.push(str.format("touched {0}",highint_floor))
-            state_up := StateLevel.touched
-        else
-            txt.push(str.format("under {0}",highint_floor))
-            state_up := StateLevel.reached
+    if math.max(close, open) <= highint_floor and low < highint_floor
+        if lastdirection(highint_floor) < 0
+            if high > highint_floor // and close[1] <= highint_floor and open[1] <= highint_floor
+                txt.push(str.format("touched {0}",highint_floor))
+                state_up := StateLevel.touched
+            else
+                txt.push(str.format("under {0}",highint_floor))
+                state_up := StateLevel.reached
 
-    if close >= lowint_ceil and open >= lowint_ceil and high > lowint_ceil
-        if low < lowint_ceil and close[1] >= lowint_ceil and open[1] >= lowint_ceil
-            txt.push(str.format("touched {0}",lowint_ceil))
-            state_dn := StateLevel.touched
-        else
-            txt.push(str.format("above {0}",lowint_ceil))
-            state_dn := StateLevel.reached
+    if math.min(close, open) >= lowint_ceil and high > lowint_ceil
+        if lastdirection(lowint_ceil) > 0
+            if low < lowint_ceil  // and close[1] >= lowint_ceil and open[1] >= lowint_ceil
+                txt.push(str.format("touched {0}",lowint_ceil))
+                state_dn := StateLevel.touched
+            else
+                txt.push(str.format("above {0}",lowint_ceil))
+                state_dn := StateLevel.reached
 
+    //lastdirection := close > open ? 1 : close < open ? -1 : lastdirection
 
-if isany
-    switch state_up
-        StateLevel.crossed => debugLabelUp(txt.join(","))
-    switch state_dn
-        StateLevel.crossed => debugLabelDn(txt.join(","))
+// if isany
+switch state_up
+    StateLevel.crossed => debugLabelUp(txt.join(","))
+switch state_dn
+    StateLevel.crossed => debugLabelDn(txt.join(","))
 
 
 
