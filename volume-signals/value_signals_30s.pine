@@ -258,12 +258,31 @@ boostmult(count) =>
         count >= 4 => 4
         count >= 2 => 2
         => 1
-boostcond(counter,koeff1=1.0,koeff2=1.0,limit=0) =>
-    boostkoeff = counter < limit ? koeff1 : koeff2
+type BoostCondCtx
+    condindex = 0
+    condcount = 0
+    name = ""  // for debug
+method boostcond(BoostCondCtx ctx, counter,limit=0,perbars=0) =>
     mult = boostmult(counter)
-    if timestamp("26 Feb 2025 11:30:00 GMT+3") <= time and time <= timestamp("26 Feb 2025 13:45:00 GMT+3")
-        log.info("{0} {1} : {2} % {3} = {4}", level_near, last_level_near, counter* boostkoeff, mult, (counter * boostkoeff) % mult)
-    (counter * boostkoeff) % mult == 0
+    cond = counter % mult == 0
+    // if timestamp("26 Feb 2025 11:30:00 GMT+3") <= time and time <= timestamp("26 Feb 2025 13:45:00 GMT+3")
+    //     log.info("{0} {1} : {2} % {3} = {4} - [{5}] {6} {7} : {8}", level_near, last_level_near, counter, mult, cond, ctx.name, limit, ctx.condcount, bar_index - ctx.condindex)
+    if limit > 0
+        if ctx.condindex > 0
+            if bar_index - ctx.condindex > perbars  // limit exceeded
+                 or counter == 0                    // external conditions (level) changed
+                ctx.condindex := 0
+                ctx.condcount := 0
+        if cond
+            if ctx.condindex == 0
+                ctx.condindex := bar_index
+            ctx.condcount := ctx.condcount + 1
+            if ctx.condcount > limit
+                cond := false
+    cond
+var ctxcross = BoostCondCtx.new(0,0,"cross")
+var ctxnear = BoostCondCtx.new(0,0,"near")
+//var ctxshared = BoostCondCtx.new(0,0,"shared")
 
 level_crossed = level_crossed_arr.size() > 0 ? level_crossed_arr.last() : na
 
@@ -274,26 +293,33 @@ if islevelchanged(level_touched, last_level_touched)
 if islevelchanged(level_near, last_level_near)
     level_near_count := 0
 
-printlabel(cond,dir) =>
-    if cond 
-        if dir == "up"
-            debugLabelUp(txt.join(","))
-        else if dir == "dn"
-            debugLabelDn(txt.join(","))
+printLabelUp(cond) =>
+    if cond
+        debugLabelUp(txt.join(","))
+printLabelDn(cond) =>
+    if cond
+        debugLabelDn(txt.join(","))
 
-// if isany
 switch state_up
-    StateLevel.crossed_multiple => printlabel(boostcond(level_crossed_count),"up")
-    StateLevel.crossed => printlabel(boostcond(level_crossed_count),"up")
-    // StateLevel.reached =>  debugLabelUp(txt.join(","))
-    // StateLevel.touched =>  debugLabelUp(txt.join(","))
-    StateLevel.near => printlabel(boostcond(math.min(level_near_count,barsanyval),1,2,100),"up")
+    StateLevel.crossed_multiple => debugLabelUp(txt.join(","))  // printLabelUp(ctxshared.boostcond(level_crossed_count))
+    StateLevel.crossed => printLabelUp(ctxcross.boostcond(math.min(level_crossed_count,barsanyval),1,50))
+    StateLevel.reached =>
+        if isanyval
+            debugLabelUp(txt.join(","))
+    StateLevel.touched =>
+        if isanyval
+            debugLabelUp(txt.join(","))
+    StateLevel.near => printLabelUp(ctxnear.boostcond(math.min(level_near_count,barsanyval),1,150))
 switch state_dn
-    StateLevel.crossed_multiple => printlabel(boostcond(level_crossed_count),"dn")
-    StateLevel.crossed => printlabel(boostcond(level_crossed_count),"dn")
-    // StateLevel.reached => debugLabelDn(txt.join(","))
-    // StateLevel.touched => debugLabelDn(txt.join(","))
-    StateLevel.near => printlabel(boostcond(math.min(level_near_count,barsanyval),1,2,100),"dn")
+    StateLevel.crossed_multiple => debugLabelDn(txt.join(","))  // printLabelDn(ctxshared.boostcond(level_crossed_count))
+    StateLevel.crossed => printLabelDn(ctxcross.boostcond(math.min(level_crossed_count,barsanyval),1,50))
+    StateLevel.reached =>
+        if isanyval
+            debugLabelDn(txt.join(","))
+    StateLevel.touched =>
+        if isanyval
+            debugLabelDn(txt.join(","))
+    StateLevel.near => printLabelDn(ctxnear.boostcond(math.min(level_near_count,barsanyval),1,150))
 
 if not na(level_crossed)
     last_level_crossed := level_crossed
