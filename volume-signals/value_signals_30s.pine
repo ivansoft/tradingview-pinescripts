@@ -109,6 +109,13 @@ enum StateLevel
     touched
     crossed
     crossed_multiple
+strstate(s) => switch s
+    StateLevel.near => "near"
+    StateLevel.reached => "reached"
+    StateLevel.touched => "touched"
+    StateLevel.crossed => "crossed"
+    StateLevel.crossed_multiple => "crossed+"
+    => "n/a"
 
 StateLevel state_up = na
 StateLevel state_dn = na
@@ -246,6 +253,9 @@ if barstate.isconfirmed and not ignorelevels
             else
                 txt.push(str.format("hit {0}",lowint_ceil))
                 state_dn := StateLevel.reached
+
+    if timestamp("27 Feb 2025 22:56:00 GMT+3") <= time and time <= timestamp("27 Feb 2025 22:58:00 GMT+3")
+        log.info("{0} {1} {2} {3} {4}", strstate(state_up), strstate(state_dn), closeint_floor[1], closeint_ceil, lastdirection(closeint_ceil))
 
 
 islevelchanged(currvalue,lastvalue) =>
