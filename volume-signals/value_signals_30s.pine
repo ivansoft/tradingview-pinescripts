@@ -6,7 +6,7 @@ debugLabelUp(txt,offset=0,overlay=true) =>
 debugLabelDn(txt,offset=0,overlay=true) =>
     label.new(bar_index+offset, low, txt, yloc = yloc.belowbar, style = label.style_arrowup, force_overlay = overlay, textcolor = color.black)
 
-var ignorelevels = ticker.standard() == "RUS:LQDT"
+var islqdt = ticker.standard() == "RUS:LQDT"
 
 p99bars = input.int(5000, "30S P99 Bars", inline = "000")
 p99 = input.float(99.5, "%", inline = "000")
@@ -160,7 +160,7 @@ lvl(l) =>
         0 => "0"
 
 
-if barstate.isconfirmed and not ignorelevels
+if barstate.isconfirmed and not islqdt
 
     if closeint_ceil[1] < closeint_floor  // CROSSED UP
         from_num = close[1] == closeint_ceil[1] ? closeint_ceil[1] + step1 : closeint_ceil[1]
@@ -435,6 +435,12 @@ deltavwap = (close - vwap) / vwap
 // plot(vwap, force_overlay = true)
 // plot(dayopen, force_overlay = true)
 
+// TODO
+if islqdt
+    na
+else
+    na
+
 if isvalueP100 and notrig("huge")
     alert(str.format( "{0} 30S Huge Volume {1}({2}) : {3} D {4} VWAP {5} {6} {7}", syminfo.ticker, strVolume(value), strPercent(value/volume_max), strPrice(nearestlevel), strPercent(deltaopen), strPercent(deltavwap), strUpDn(oc2-oc2[1]), istrig("big")?"SAME":"" ), alert.freq_all)
     trig("huge")
@@ -455,19 +461,6 @@ if (iscrossedup or iscrosseddn) and notrig("level") and last_triggered_level != 
     alert(str.format( "{0} 30S Cross Level {1} D {2} VWAP {3} {4}", syminfo.ticker, strPrice(level_crossed), strPercent(deltaopen), strPercent(deltavwap), strUpDn(level_crossed-last_level_crossed) ), alert.freq_all)
     last_triggered_level := level_crossed
     trig("level")
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
