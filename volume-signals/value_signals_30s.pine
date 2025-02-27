@@ -258,31 +258,24 @@ boostmult(count) =>
         count >= 4 => 4
         count >= 2 => 2
         => 1
-var boostcounter_chooser = 0
-boostcounter(int arg=na) =>
-    chooser = nz(arg, boostcounter_chooser)
-    switch chooser
-        0 => level_near_count
-        1 => barsanyval
-        2 => barsany
+boostcond(counter,koeff1=1.0,koeff2=1.0,limit=0) =>
+    boostkoeff = counter < limit ? koeff1 : koeff2
+    mult = boostmult(counter)
+    if timestamp("26 Feb 2025 11:30:00 GMT+3") <= time and time <= timestamp("26 Feb 2025 13:45:00 GMT+3")
+        log.info("{0} {1} : {2} % {3} = {4}", level_near, last_level_near, counter* boostkoeff, mult, (counter * boostkoeff) % mult)
+    (counter * boostkoeff) % mult == 0
 
 level_crossed = level_crossed_arr.size() > 0 ? level_crossed_arr.last() : na
 
 if islevelchanged(level_crossed, last_level_crossed)
     level_crossed_count := 0
-    boostcounter_chooser := 0
 if islevelchanged(level_touched, last_level_touched)
     level_touched_count := 0
 if islevelchanged(level_near, last_level_near)
     level_near_count := 0
-if isanyval
-    boostcounter_chooser := 1
 
-printlabel(count,dir) =>
-    mult = boostmult(count)
-    if timestamp("26 Feb 2025 11:30:00 GMT+3") <= time and time <= timestamp("26 Feb 2025 13:45:00 GMT+3")
-        log.info("{0} {1} : {2} % {3} = {4}", level_near, last_level_near, count, mult, count % mult)
-    if count % mult == 0 
+printlabel(cond,dir) =>
+    if cond 
         if dir == "up"
             debugLabelUp(txt.join(","))
         else if dir == "dn"
@@ -290,17 +283,17 @@ printlabel(count,dir) =>
 
 // if isany
 switch state_up
-    // StateLevel.crossed_multiple => printlabel(level_crossed_count,"up")
-    // StateLevel.crossed => printlabel(level_crossed_count,"up")
+    StateLevel.crossed_multiple => printlabel(boostcond(level_crossed_count),"up")
+    StateLevel.crossed => printlabel(boostcond(level_crossed_count),"up")
     // StateLevel.reached =>  debugLabelUp(txt.join(","))
     // StateLevel.touched =>  debugLabelUp(txt.join(","))
-    StateLevel.near => printlabel(boostcounter(),"up")
+    StateLevel.near => printlabel(boostcond(math.min(level_near_count,barsanyval),1,2,100),"up")
 switch state_dn
-    // StateLevel.crossed_multiple => printlabel(level_crossed_count,"dn")
-    // StateLevel.crossed => printlabel(level_crossed_count,"dn")
+    StateLevel.crossed_multiple => printlabel(boostcond(level_crossed_count),"dn")
+    StateLevel.crossed => printlabel(boostcond(level_crossed_count),"dn")
     // StateLevel.reached => debugLabelDn(txt.join(","))
     // StateLevel.touched => debugLabelDn(txt.join(","))
-    StateLevel.near => printlabel(boostcounter(),"dn")
+    StateLevel.near => printlabel(boostcond(math.min(level_near_count,barsanyval),1,2,100),"dn")
 
 if not na(level_crossed)
     last_level_crossed := level_crossed
