@@ -28,7 +28,7 @@ var float step10p = input.float(5, "step x10 %", inline = "1") / 100  // 5 %
 var float zonediv = input.float(8, "Level zone (1/x)", inline = "2")
 
 dispBg = input.bool(true, "Background Highlights", group = "Show/Hide")
-
+dispLabels = input.bool(true, "Labels", group = "Show/Hide")
 
 var divisor = array.from(
      0.0001, 0.0002, 0.0005,
@@ -124,7 +124,9 @@ var level_near_count = 0
 barsanyval = ta.barssince(isanyval)
 barsanycum = ta.barssince(isanyval)
 barsany = ta.barssince(isanyval)
-
+var level_crossed_index = 0
+var level_touched_index = 0
+var level_near_index = 0
 
 lastdirection(baseprice,lookback=14) =>
     result = 0
@@ -300,33 +302,37 @@ printLabelDn(cond) =>
     if cond
         debugLabelDn(txt.join(","))
 
-switch state_up
-    StateLevel.crossed_multiple => debugLabelUp(txt.join(","))  // printLabelUp(ctxshared.boostcond(level_crossed_count))
-    StateLevel.crossed => printLabelUp(ctxcross.boostcond(math.min(level_crossed_count,barsanyval),1,50))
-    StateLevel.reached =>
-        if isanyval
-            debugLabelUp(txt.join(","))
-    StateLevel.touched =>
-        if isanyval
-            debugLabelUp(txt.join(","))
-    StateLevel.near => printLabelUp(ctxnear.boostcond(math.min(level_near_count,barsanyval),1,150))
-switch state_dn
-    StateLevel.crossed_multiple => debugLabelDn(txt.join(","))  // printLabelDn(ctxshared.boostcond(level_crossed_count))
-    StateLevel.crossed => printLabelDn(ctxcross.boostcond(math.min(level_crossed_count,barsanyval),1,50))
-    StateLevel.reached =>
-        if isanyval
-            debugLabelDn(txt.join(","))
-    StateLevel.touched =>
-        if isanyval
-            debugLabelDn(txt.join(","))
-    StateLevel.near => printLabelDn(ctxnear.boostcond(math.min(level_near_count,barsanyval),1,150))
+if dispLabels
+    switch state_up
+        StateLevel.crossed_multiple => debugLabelUp(txt.join(","))  // printLabelUp(ctxshared.boostcond(level_crossed_count))
+        StateLevel.crossed => printLabelUp(ctxcross.boostcond(math.min(level_crossed_count,barsanyval),1,50))
+        StateLevel.reached =>
+            if isanyval
+                debugLabelUp(txt.join(","))
+        StateLevel.touched =>
+            if isanyval
+                debugLabelUp(txt.join(","))
+        StateLevel.near => printLabelUp(ctxnear.boostcond(math.min(level_near_count,barsanyval),1,150))
+    switch state_dn
+        StateLevel.crossed_multiple => debugLabelDn(txt.join(","))  // printLabelDn(ctxshared.boostcond(level_crossed_count))
+        StateLevel.crossed => printLabelDn(ctxcross.boostcond(math.min(level_crossed_count,barsanyval),1,50))
+        StateLevel.reached =>
+            if isanyval
+                debugLabelDn(txt.join(","))
+        StateLevel.touched =>
+            if isanyval
+                debugLabelDn(txt.join(","))
+        StateLevel.near => printLabelDn(ctxnear.boostcond(math.min(level_near_count,barsanyval),1,150))
 
 if not na(level_crossed)
     last_level_crossed := level_crossed
+    level_crossed_index := bar_index
 if not na(level_touched)
     last_level_touched := level_touched
+    level_touched_index := bar_index
 if not na(level_near)
     last_level_near := level_near
+    level_near_index := bar_index
 
 
 colorplotvalue = switch
@@ -355,7 +361,7 @@ bgcolorall_1 = switch
     isvcum10m => color.new(color.olive, 95)
     => na
 
-plot(value, color=colorplotvalue, style=plot.style_columns, title="Value")
+plot(value, color=colorplotvalue, style=plot.style_columns, title="Value", editable = false)
 
 bgcolor(bgcolorall_1, editable = false, display = dispBg ? display.all : display.none)
 bgcolor(bgcolorall, editable = false, display = dispBg ? display.all : display.none, force_overlay = true)
@@ -364,6 +370,59 @@ bgcolor(bgcolorall, editable = false, display = dispBg ? display.all : display.n
 
 // ALERTS
 
+var volume_max = 0.0
+var volume_scale = float(na)
+if value > volume_max
+    volume_max := value
+if barstate.islastconfirmedhistory
+    //log.info("{0} {1}", math.ceil(math.log10(volume_max)), volume_max)
+    volume_scale := math.ceil(math.log10(volume_max))
+strVolume(float v) =>
+    format = switch
+        volume_scale > 8 => str.format("{0,number,#.##}B", v / 1000000000)
+        volume_scale > 5 => str.format("{0,number,#.##}M", v /    1000000)
+        =>                  str.format("{0,number,#.##}K", v /       1000)
+    format
+strPrice(float v) =>
+    var _scale = math.ceil(math.log10(syminfo.pricescale))
+    var _strscale = str.repeat("#",_scale)
+    var _strfmt = _scale > 0 ? "#."+_strscale : "#"
+    str.format("{0,number,"+_strfmt+"}",v)
+strPercent(float v) => str.format("{0,number,#.#}%", v*100)
+strUpDn(float v) => v > 0 ? "Up" : v < 0 ? "Dn" : "Flat"
 
-var level = float(na)
-//var 
+varip triggrered = map.new<string,bool>()
+if barstate.isnew
+    triggrered.clear()
+istrig(v) => triggrered.contains(v)
+notrig(v) => not triggrered.contains(v)
+trig(v) => triggrered.put(v,true)
+
+nearestlevel = switch math.max(level_crossed_index,level_near_index,level_touched_index)
+    level_crossed_index => level_crossed
+    level_touched_index => level_touched
+    level_near_index => level_near
+    => na
+
+dayopen = open[ta.barssince(ta.change(dayofmonth) != 0)]
+deltaopen = (close - dayopen) / dayopen
+oc2 = (open + close) / 2
+vwap = ta.vwap(oc2, ta.change(dayofmonth) != 0)
+deltavwap = (close - vwap) / vwap
+deltavalue = (volume_max - value) / value
+
+if isvalueP100 and notrig("huge")
+    alert(str.format( "{0} 30S Huge {1}({2}) : {3} D {4} VWAP {5} {6} {7}", syminfo.ticker, strVolume(value), strPercent(deltavalue), strPrice(nearestlevel), strPercent(deltaopen), strPercent(deltavwap), strUpDn(oc2-oc2[1]), istrig("big")?"SAME":"" ), alert.freq_all)
+    trig("huge")
+if isvalueP99 and notrig("big")
+    alert(str.format( "{0} 30S Big {1}({2}) : {3} D {4} VWAP {5} {6}", syminfo.ticker, strVolume(value), strPercent(deltavalue), strPrice(nearestlevel), strPercent(deltaopen), strPercent(deltavwap), strUpDn(oc2-oc2[1]) ), alert.freq_all)
+    trig("big")
+if isvcum1m and notrig("1m")
+    if isvcum1m[1]
+        alert(str.format( "{0} 30S Big {1}({2}) : {3} D {4} VWAP {5} {6} {7}", syminfo.ticker, strVolume(value), strPercent(deltavalue), strPrice(nearestlevel), strPercent(deltaopen), strPercent(deltavwap), strUpDn(oc2-oc2[1]), istrig("big") or istrig("huge")?"SAME CONTINUE":"CONTINUE" ), alert.freq_all)
+    else
+        alert(str.format( "{0} 30S Big {1}({2}) : {3} D {4} VWAP {5} {6} {7}", syminfo.ticker, strVolume(value), strPercent(deltavalue), strPrice(nearestlevel), strPercent(deltaopen), strPercent(deltavwap), strUpDn(oc2-oc2[1]), istrig("big") or istrig("huge")?"SAME FIRST":"FIRST" ), alert.freq_all)
+    trig("1m")
+if level_crossed_count == 0 and notrig("level")
+    alert(str.format( "{0} 30S Cross {1}({2}) : {3} D {4} VWAP {5} {6}", syminfo.ticker, strVolume(value), strPercent(deltavalue), strPrice(level_crossed), strPercent(deltaopen), strPercent(deltavwap), strUpDn(oc2-oc2[1]) ), alert.freq_all)
+    trig("level")
