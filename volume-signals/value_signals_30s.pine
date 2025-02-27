@@ -278,8 +278,8 @@ if barstate.isconfirmed and not islqdt
                 txt.push(str.format("hit {0}",lowint_ceil))
                 state_dn := StateLevel.reached
 
-    if timestamp("27 Feb 2025 22:56:00 GMT+3") <= time and time <= timestamp("27 Feb 2025 22:58:00 GMT+3")
-        log.info("{0} {1} {2} {3} {4}", strstate(state_up), strstate(state_dn), closeint_floor[1], closeint_ceil, lastdirection(closeint_ceil))
+    // if timestamp("27 Feb 2025 22:56:00 GMT+3") <= time and time <= timestamp("27 Feb 2025 22:58:00 GMT+3")
+    //     log.info("{0} {1} {2} {3} {4}", strstate(state_up), strstate(state_dn), closeint_floor[1], closeint_ceil, lastdirection(closeint_ceil))
 
 
 islevelchanged(currvalue,lastvalue) =>
@@ -440,10 +440,11 @@ nearestlevel = switch math.max(level_crossed_index,level_near_index,level_touche
     level_touched_index => last_level_touched
     level_near_index => last_level_near
     => na
+// log.info("{0} {1} {2} - {3} {4} {5}", prev_level_crossed_index,prev_level_near_index,prev_level_touched_index,  prev_last_level_crossed, prev_last_level_touched, prev_last_level_near)
 prevnearestlevel = switch math.max(prev_level_crossed_index,prev_level_near_index,prev_level_touched_index)
-    level_crossed_index => prev_level_crossed
-    level_touched_index => prev_level_touched
-    level_near_index => prev_level_near
+    prev_level_crossed_index => prev_level_crossed
+    prev_level_touched_index => prev_level_touched
+    prev_level_near_index => prev_level_near
     => na
 
 dayopen = open[ta.barssince(ta.change(dayofmonth) != 0)]
@@ -479,7 +480,7 @@ var last_triggered_level = float(na)
 // if iscrossedup or iscrosseddn
 //     log.info("{0} {1} {2} {3} : {4}", iscrossedup, iscrosseddn, last_triggered_level != level_crossed, notrig("level"), islevelchanged(level_crossed, last_level_crossed))
 if ((iscrossedup or iscrosseddn) and last_triggered_level != level_crossed) and notrig("level")
-    alert(str.format( "{0} 30S C, ross Level {1}->{2} D {3} VWAP {4} {5}", syminfo.ticker, strPrice(last_level_crossed), strPrice(level_crossed), strPercent(deltaopen), strPercent(deltavwap), strUpDn(level_crossed-last_level_crossed) ), alert.freq_all)
+    alert(str.format( "{0} 30S Cross Level {1}->{2} D {3} VWAP {4} {5}", syminfo.ticker, strPrice(last_level_crossed), strPrice(level_crossed), strPercent(deltaopen), strPercent(deltavwap), strUpDn(level_crossed-last_level_crossed) ), alert.freq_all)
     last_triggered_level := level_crossed
     trig("level")
 
