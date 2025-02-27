@@ -97,7 +97,9 @@ isvcum3m = vcum3m >= vp99m3
 isvcum5m = vcum5m >= vp99m5
 isvcum10m = vcum10m >= vp99m10
 
-isany = isvcum1m or isvcum3m or isvcum5m or isvcum10m or isvalueP100 or isvalueP99
+isanyval = isvalueP100 or isvalueP99
+isanycum = isvcum1m or isvcum3m or isvcum5m or isvcum10m
+isany = isanyval or isanycum
 
 
 enum StateLevel
@@ -110,6 +112,15 @@ enum StateLevel
 StateLevel state_up = na
 StateLevel state_dn = na
 txt = array.new<string>()
+level_crossed_arr = array.new<float>()
+level_touched = float(na)
+level_near = float(na)
+var last_level_crossed = float(na)
+var last_level_touched = float(na)
+var last_level_near = float(na)
+var level_crossed_count = 0
+var level_touched_count = 0
+var level_near_count = 0
 
 
 lastdirection(baseprice,lookback=14) =>
@@ -135,22 +146,30 @@ if barstate.isconfirmed
         from_num = close[1] == closeint_ceil[1] ? closeint_ceil[1] + step1 : closeint_ceil[1]
         to_num = closeint_floor
         for level = from_num to to_num by step1
+            level_crossed_arr.push(level)
+            level_crossed_count := level_crossed_count + 1
             txt.push(str.format("{0}@",level))
         state_up := txt.size() > 1 ? StateLevel.crossed_multiple : StateLevel.crossed
     else if closeint_ceil[1] < openint_floor
         from_num = close[1] == closeint_ceil[1] ? closeint_ceil[1] + step1 : closeint_ceil[1]
         to_num = openint_floor
         for level = from_num to to_num by step1
+            level_crossed_arr.push(level)
+            level_crossed_count := level_crossed_count + 1
             txt.push(str.format("{0}@",level))
         state_up := txt.size() > 1 ? StateLevel.crossed_multiple : StateLevel.crossed
     else if closeint_ceil[1] == closeint_floor and lastdirection(closeint_floor) < 0 and
          (close[1] < close) and
          (close[1] <= closeint_ceil[1] and closeint_ceil[1] < close)
+        level_crossed_arr.push(closeint_floor)
+        level_crossed_count := level_crossed_count + 1
         txt.push(str.format("{0}^{1}",closeint_floor,lvl(closeint_floor)))
         state_up := StateLevel.crossed
     else if closeint_ceil[1] == openint_floor and lastdirection(openint_floor) < 0 and
          (close[1] < open) and
          (close[1] <= closeint_ceil[1] and closeint_ceil[1] < open)
+        level_crossed_arr.push(openint_floor)
+        level_crossed_count := level_crossed_count + 1
         txt.push(str.format("{0}*{1}",openint_floor,lvl(openint_floor)))
         state_up := StateLevel.crossed
 
@@ -158,38 +177,52 @@ if barstate.isconfirmed
         from_num = close[1] == closeint_floor[1] ? closeint_floor[1] - step1 : closeint_floor[1]
         to_num = closeint_ceil
         for level = from_num to to_num by step1
+            level_crossed_arr.push(level)
+            level_crossed_count := level_crossed_count + 1
             txt.push(str.format("{0}@",level))
         state_dn := txt.size() > 1 ? StateLevel.crossed_multiple : StateLevel.crossed
     else if closeint_floor[1] > openint_ceil
         from_num = close[1] == closeint_floor[1] ? closeint_floor[1] - step1 : closeint_floor[1]
         to_num = openint_ceil
         for level = from_num to to_num by step1
+            level_crossed_arr.push(level)
+            level_crossed_count := level_crossed_count + 1
             txt.push(str.format("{0}@",level))
         state_dn := txt.size() > 1 ? StateLevel.crossed_multiple : StateLevel.crossed
     else if closeint_floor[1] == closeint_ceil and lastdirection(closeint_ceil) > 0 and
          (close[1] > close) and
          (close < closeint_floor[1] and closeint_floor[1] <= close[1])
+        level_crossed_arr.push(closeint_ceil)
+        level_crossed_count := level_crossed_count + 1
         txt.push(str.format("{0}v{1}",closeint_ceil,lvl(closeint_ceil)))
         state_dn := StateLevel.crossed
     else if closeint_floor[1] == openint_ceil and lastdirection(closeint_ceil) > 0 and
          (close[1] > open) and
          (open < closeint_floor[1] and closeint_floor[1] <= close[1])
+        level_crossed_arr.push(openint_ceil)
+        level_crossed_count := level_crossed_count + 1
         txt.push(str.format("{0}*{1}",openint_ceil,lvl(closeint_ceil)))
         state_dn := StateLevel.crossed
 
 
     if highint_ceil - math.max(close, open) < roundzone1
         if lastdirection(highint_ceil) < 0
+            level_near := highint_ceil
+            level_near_count := level_near_count + 1
             txt.push(str.format("under {0}",highint_ceil))
             state_up := StateLevel.near
 
     if math.min(close, open) - lowint_floor < roundzone1
         if lastdirection(lowint_floor) > 0
+            level_near := lowint_floor
+            level_near_count := level_near_count + 1
             txt.push(str.format("above {0}",lowint_floor))
             state_dn := StateLevel.near
 
     if (low < highint_floor and highint_floor <= high) and math.max(close, open) <= highint_floor
         if lastdirection(highint_floor) < 0
+            level_touched := highint_floor
+            level_touched_count := level_touched_count + 1
             if high > highint_floor
                 txt.push(str.format("touched {0}",highint_floor))
                 state_up := StateLevel.touched
@@ -199,6 +232,8 @@ if barstate.isconfirmed
 
     if (low <= lowint_ceil and lowint_ceil < high) and math.min(close, open) >= lowint_ceil
         if lastdirection(lowint_ceil) > 0
+            level_touched := lowint_ceil
+            level_touched_count := level_touched_count + 1
             if low < lowint_ceil
                 txt.push(str.format("touched {0}",lowint_ceil))
                 state_dn := StateLevel.touched
@@ -206,20 +241,60 @@ if barstate.isconfirmed
                 txt.push(str.format("hit {0}",lowint_ceil))
                 state_dn := StateLevel.reached
 
+
+islevelchanged(currvalue,lastvalue) =>
+    not na(currvalue) and not na(lastvalue) and currvalue != lastvalue
+boostmult(count) =>
+    switch
+        count >= 256 => 256  // max every 256's bar (~2min)
+        count >= 128 => 128
+        count >= 64 => 64
+        count >= 32 => 32
+        count >= 16 => 16
+        count >= 8 => 8
+        count >= 4 => 4
+        count >= 2 => 2
+        => 1
+
+level_crossed = level_crossed_arr.size() > 0 ? level_crossed_arr.last() : na
+
+if islevelchanged(level_crossed, last_level_crossed)
+    level_crossed_count := 0
+if islevelchanged(level_touched, last_level_touched)
+    level_touched_count := 0
+if islevelchanged(level_near, last_level_near)
+    level_near_count := 0
+
+printlabel(count,dir) =>
+    mult = boostmult(count)
+    // if timestamp("26 Feb 2025 11:30:00 GMT+3") <= time and time <= timestamp("26 Feb 2025 13:45:00 GMT+3")
+    //     log.info("{0} {1} : {2} % {3} = {4}", level_near, last_level_near, count, mult, count % mult)
+    if count % mult == 0 
+        if dir == "up"
+            debugLabelUp(txt.join(","))
+        else if dir == "dn"
+            debugLabelDn(txt.join(","))
+
 // if isany
 switch state_up
-    //StateLevel.crossed_multiple => debugLabelUp(txt.join(","))
-    //StateLevel.crossed => debugLabelUp(txt.join(","))
-    //StateLevel.reached => debugLabelUp(txt.join(","))
-    //StateLevel.touched => debugLabelUp(txt.join(","))
-    StateLevel.near => debugLabelUp(txt.join(","))
+    // StateLevel.crossed_multiple => printlabel(level_crossed_count,"up")
+    // StateLevel.crossed => printlabel(level_crossed_count,"up")
+    // StateLevel.reached =>  debugLabelUp(txt.join(","))
+    // StateLevel.touched =>  debugLabelUp(txt.join(","))
+    StateLevel.near => printlabel(level_near_count,"up")
 switch state_dn
-    //StateLevel.crossed_multiple => debugLabelDn(txt.join(","))
-    //StateLevel.crossed => debugLabelDn(txt.join(","))
-    //StateLevel.reached => debugLabelDn(txt.join(","))
-    //StateLevel.touched => debugLabelDn(txt.join(","))
-    StateLevel.near => debugLabelDn(txt.join(","))
+    // StateLevel.crossed_multiple => printlabel(level_crossed_count,"dn")
+    // StateLevel.crossed => printlabel(level_crossed_count,"dn")
+    // StateLevel.reached => debugLabelDn(txt.join(","))
+    // StateLevel.touched => debugLabelDn(txt.join(","))
+    StateLevel.near => printlabel(level_near_count,"dn")
 
+if not na(level_crossed)
+    last_level_crossed := level_crossed
+if not na(level_touched)
+    last_level_touched := level_touched
+if not na(level_near)
+    last_level_near := level_near
 
 
 colorplotvalue = switch
@@ -253,3 +328,10 @@ plot(value, color=colorplotvalue, style=plot.style_columns, title="Value")
 bgcolor(bgcolorall_1, editable = false, display = dispBg ? display.all : display.none)
 bgcolor(bgcolorall, editable = false, display = dispBg ? display.all : display.none, force_overlay = true)
 
+
+
+// ALERTS
+
+
+var level = float(na)
+//var 
