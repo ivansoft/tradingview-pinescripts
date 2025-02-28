@@ -66,6 +66,9 @@ vcum3m = math.sum(value, 6)     //  3 min
 vcum5m = math.sum(value, 10)    //  5 min
 vcum10m = math.sum(value, 20)   // 10 min
 
+vp99 = ta.percentile_nearest_rank(value, p99bars, p99)
+vp100 = ta.percentile_nearest_rank(value, p99bars, 100)
+
 [vp99m1,vp100m1] = request.security(syminfo.tickerid, "1", [
      ta.percentile_nearest_rank(value, p99m1bars, p99m1),
      ta.percentile_nearest_rank(value, p99m1bars, 100)
@@ -85,9 +88,6 @@ vcum10m = math.sum(value, 20)   // 10 min
      ta.percentile_nearest_rank(value, p99m10bars, p99m10),
      ta.percentile_nearest_rank(value, p99m10bars, 100)
      ], lookahead = barmerge.lookahead_on)
-
-vp99 = ta.percentile_nearest_rank(value, p99bars, p99)
-vp100 = ta.percentile_nearest_rank(value, p99bars, 100)
 
 
 isvalueP100 = value >= vp100
