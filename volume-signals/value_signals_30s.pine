@@ -139,10 +139,12 @@ type LevelInfo
     int indexstart         // index of first signal
 type LevelContext
     LevelInfo curr
-    LevelInfo prev         // last unique level vaue - direction information
-    LevelInfo bigval       // triggered on bars with isvalueP99/isvalueP100 ..
+    array<LevelInfo> val     // last unique level values
+    array<LevelInfo> bigval  // triggered on bars with isvalueP99/isvalueP100 ..
+method prev(LevelContext ctx) =>  
+    ctx.val.size() > 0 ? ctx.val.get(0) : na
 create_levelinfo() => LevelInfo.new(stats=LevelStats.new(count=0))
-create_levelcontext() => LevelContext.new(create_levelinfo(), create_levelinfo(), create_levelinfo())
+create_levelcontext() => LevelContext.new(create_levelinfo(),array.from(create_levelinfo()),array.from(create_levelinfo()))
 var level_crossed = create_levelcontext()
 var level_touched = create_levelcontext()
 var level_near = create_levelcontext()
@@ -150,17 +152,6 @@ deepcopy_levelinfo(LevelInfo frominfo, LevelInfo toinfo) =>
     toinfo.price := frominfo.price
     toinfo.indexstart := frominfo.indexstart
     toinfo.stats.count := frominfo.stats.count
-
-endofbar_update_levelinfo_price(LevelContext level, float price) =>
-    if not na(price)
-        level.curr.price := price
-        if isanyval
-            level.bigval.price := price
-endofbar_levelinfo() =>
-    endofbar_update_levelinfo_price(level_crossed, price_level_crossed)
-    endofbar_update_levelinfo_price(level_touched, price_level_touched)
-    endofbar_update_levelinfo_price(level_near, price_level_near)
-
 
 barsanyval = ta.barssince(isanyval)
 barsanycum = ta.barssince(isanyval)
@@ -308,11 +299,28 @@ price_level_crossed := get_level_crossed()
 
 islevelchanged(float currvalue, float lastvalue) =>
     not na(currvalue) and not na(lastvalue) and currvalue != lastvalue
+
+reset_stats(LevelInfo info, int index) =>
+    info.stats.count := 0
+    info.indexstart := bar_index
 check_level_changed(LevelContext level, float price) =>
     if islevelchanged(price, level.curr.price)
-        deepcopy_levelinfo(frominfo=level.curr, toinfo=level.prev)
-        level.curr.stats.count := 0
-        level.curr.indexstart := bar_index
+        level.val.unshift(level.curr.copy())  //deepcopy_levelinfo(frominfo=level.curr, toinfo=level.prev())
+        reset_stats(level.curr, bar_index)
+        if isanyval
+            level.bigval.unshift(create_levelinfo())
+            reset_stats(level.bigval.first(), bar_index)
+
+update_price(LevelInfo info, float price) =>
+    if na(info.price)
+        info.indexstart := bar_index    // first-time level detected
+    info.price := price
+endofbar_update_levelinfo_price(LevelContext level, float price) =>
+    if not na(price)
+        update_price(level.curr, price)
+        if isanyval
+            update_price(level.bigval.first(), price)
+
 check_level_changed(level_crossed, price_level_crossed)
 check_level_changed(level_touched, price_level_touched)
 check_level_changed(level_near, price_level_near)
@@ -422,13 +430,13 @@ bgcolor(bgcolorall, editable = false, display = dispBg ? display.all : display.n
 // ALERTS
 
 var volume_max = 0.0
-volume_median_5000 = ta.median(_value, 5000)
+// volume_median_5000 = ta.median(_value, 5000)
 var volume_scale = float(na)
 if _value > volume_max
     volume_max := _value
 if barstate.islastconfirmedhistory
     //log.info("{0} {1}", math.ceil(math.log10(volume_max)), volume_max)
-    volume_scale := math.ceil(math.log10(volume_median_5000))
+    volume_scale := math.ceil(math.log10(volume_max))
 strVolume(float v) =>
     format = switch
         volume_scale >= 8 => str.format("{0,number,#.##}B", v / 1000000000)
@@ -458,11 +466,19 @@ nearestlevel = switch math.max(level_crossed.curr.indexstart, level_touched.curr
     level_touched.curr.indexstart => level_touched.curr.price
     level_near.curr.indexstart => level_near.curr.price
     => na
-prevnearestlevel = switch math.max(level_crossed.prev.indexstart, level_touched.prev.indexstart, level_near.prev.indexstart)
-    level_crossed.prev.indexstart => level_crossed.prev.price
-    level_touched.prev.indexstart => level_touched.prev.price
-    level_near.prev.indexstart => level_near.prev.price
+prevnearestlevel = switch math.max(level_crossed.prev().indexstart, level_touched.prev().indexstart, level_near.prev().indexstart)
+    level_crossed.prev().indexstart => level_crossed.prev().price
+    level_touched.prev().indexstart => level_touched.prev().price
+    level_near.prev().indexstart => level_near.prev().price
     => na
+prevnearestlevelbigval = switch level_touched.bigval.size()
+    1 => na
+    =>
+        switch math.max(level_crossed.bigval.get(1).indexstart, level_touched.bigval.get(1).indexstart, level_near.bigval.get(1).indexstart)
+            level_crossed.prev().indexstart => level_crossed.prev().price
+            level_touched.prev().indexstart => level_touched.prev().price
+            level_near.prev().indexstart => level_near.prev().price
+            => na
 
 dayopen = open[ta.barssince(ta.change(dayofmonth) != 0)]
 deltaopen = (close - dayopen) / dayopen
@@ -472,8 +488,6 @@ deltavwap = (close - vwap) / vwap
 // plot(vwap, force_overlay = true)
 // plot(dayopen, force_overlay = true)
 
-issamemintrigvalue = second >= 30 and isanyval[1]
-
 // TODO
 if islqdt
     na
@@ -481,16 +495,16 @@ else
     na
 
 if isvalueP100 and notrig("huge")
-    alert(str.format( "{0} 30S Huge Volume {1}({2}) : {3}->{4} D {5} VWAP {6} {7} {8}", syminfo.ticker, strVolume(_value), strPercent(_value/volume_max), strPrice(prevnearestlevel), strPrice(nearestlevel), strPercent(deltaopen), strPercent(deltavwap), strUpDn(oc2-oc2[1]), istrig("big")?"SAME":"" ), alert.freq_all)
+    alert(str.format( "{0} 30S Huge Volume {1}({2}) : {3}->{4} D {5} VWAP {6} {7} {8}", syminfo.ticker, strVolume(_value), strPercent(_value/volume_max), strPrice(prevnearestlevelbigval), strPrice(nearestlevel), strPercent(deltaopen), strPercent(deltavwap), strUpDn(oc2-oc2[1]), istrig("big")?"SAME":"" ), alert.freq_all)
     trig("huge")
 if isvalueP99 and notrig("big")
-    alert(str.format( "{0} 30S Big Volume {1}({2}) : {3}->{4} D {5} VWAP {6} {7}", syminfo.ticker, strVolume(_value), strPercent(_value/volume_max), strPrice(prevnearestlevel), strPrice(nearestlevel), strPercent(deltaopen), strPercent(deltavwap), strUpDn(oc2-oc2[1]) ), alert.freq_all)
+    alert(str.format( "{0} 30S Big Volume {1}({2}) : {3}->{4} D {5} VWAP {6} {7}", syminfo.ticker, strVolume(_value), strPercent(_value/volume_max), strPrice(prevnearestlevelbigval), strPrice(nearestlevel), strPercent(deltaopen), strPercent(deltavwap), strUpDn(oc2-oc2[1]) ), alert.freq_all)
     trig("big")
-if isvcum1m and notrig("1mbig") and notrig("big") and notrig("huge") and not issamemintrigvalue
-    alert(str.format( "{0} 1m Big Volume {1}({2}) : {3}->{4} D {5} VWAP {6} {7} {8}", syminfo.ticker, strVolume(_value), strPercent(vcum1m/volume_max), strPrice(prevnearestlevel), strPrice(nearestlevel), strPercent(deltaopen), strPercent(deltavwap), strUpDn(oc2-oc2[1]), istrig("big") or istrig("huge")?"SAME":"" ), alert.freq_all)
+if isvcum1m and notrig("1mbig") and notrig("big") and notrig("huge") and not isanyval[1]
+    alert(str.format( "{0} 1m Big Volume {1}({2}) : {3}->{4} D {5} VWAP {6} {7} {8}", syminfo.ticker, strVolume(_value), strPercent(vcum1m/volume_max), strPrice(prevnearestlevelbigval), strPrice(nearestlevel), strPercent(deltaopen), strPercent(deltavwap), strUpDn(oc2-oc2[1]), istrig("big") or istrig("huge")?"SAME":"" ), alert.freq_all)
     trig("1mbig")
-if vcum1m >= vp100m1 and notrig("1mhuge") and notrig("big") and notrig("huge") and not issamemintrigvalue
-    alert(str.format( "{0} 1m Huge Volume {1}({2}) : {3}->{4} D {5} VWAP {6} {7}", syminfo.ticker, strVolume(_value), strPercent(vcum1m/volume_max), strPrice(prevnearestlevel), strPrice(nearestlevel), strPercent(deltaopen), strPercent(deltavwap), strUpDn(oc2-oc2[1]), istrig("big") or istrig("huge") or istrig("1mbig")?"SAME":"" ), alert.freq_all)
+if vcum1m >= vp100m1 and notrig("1mhuge") and notrig("big") and notrig("huge") and not isanyval[1]
+    alert(str.format( "{0} 1m Huge Volume {1}({2}) : {3}->{4} D {5} VWAP {6} {7}", syminfo.ticker, strVolume(_value), strPercent(vcum1m/volume_max), strPrice(prevnearestlevelbigval), strPrice(nearestlevel), strPercent(deltaopen), strPercent(deltavwap), strUpDn(oc2-oc2[1]), istrig("big") or istrig("huge") or istrig("1mbig")?"SAME":"" ), alert.freq_all)
     trig("1mhuge")
 
 iscrossedup = state_dn == StateLevel.crossed or state_dn == StateLevel.crossed_multiple
@@ -511,4 +525,6 @@ if ((iscrossedup or iscrosseddn) and last_triggered_level != price_level_crossed
 
 // EOB - End of Bar
 
-endofbar_levelinfo()
+endofbar_update_levelinfo_price(level_crossed, price_level_crossed)
+endofbar_update_levelinfo_price(level_touched, price_level_touched)
+endofbar_update_levelinfo_price(level_near, price_level_near)
