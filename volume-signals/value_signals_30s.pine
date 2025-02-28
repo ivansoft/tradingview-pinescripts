@@ -144,7 +144,7 @@ type LevelContext
 method prev(LevelContext ctx) =>  
     ctx.val.size() > 0 ? ctx.val.get(0) : na
 create_levelinfo() => LevelInfo.new(stats=LevelStats.new(count=0))
-create_levelcontext() => LevelContext.new(create_levelinfo(),array.from(create_levelinfo()),array.from(create_levelinfo()))
+create_levelcontext() => LevelContext.new(curr=create_levelinfo(),val=array.from(create_levelinfo()),bigval=array.from(create_levelinfo()))
 var level_crossed = create_levelcontext()
 var level_touched = create_levelcontext()
 var level_near = create_levelcontext()
@@ -436,7 +436,7 @@ if _value > volume_max
     volume_max := _value
 if barstate.islastconfirmedhistory
     //log.info("{0} {1}", math.ceil(math.log10(volume_max)), volume_max)
-    volume_scale := math.ceil(math.log10(volume_max))
+    volume_scale := math.ceil(math.log10(volume_max/2))
 strVolume(float v) =>
     format = switch
         volume_scale >= 8 => str.format("{0,number,#.##}B", v / 1000000000)
@@ -471,8 +471,8 @@ prevnearestlevel = switch math.max(level_crossed.prev().indexstart, level_touche
     level_touched.prev().indexstart => level_touched.prev().price
     level_near.prev().indexstart => level_near.prev().price
     => na
-prevnearestlevelbigval = switch level_touched.bigval.size()
-    1 => na
+prevnearestlevelbigval = switch
+    math.min(level_crossed.bigval.size(), level_touched.bigval.size(), level_near.bigval.size()) < 2 => prevnearestlevel
     =>
         switch math.max(level_crossed.bigval.get(1).indexstart, level_touched.bigval.get(1).indexstart, level_near.bigval.get(1).indexstart)
             level_crossed.prev().indexstart => level_crossed.prev().price
