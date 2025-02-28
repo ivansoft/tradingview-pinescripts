@@ -61,13 +61,19 @@ lowint_floor = step1 * math.floor(low / step1)
 value = volume == 0.0 ? na : volume * hl2
 
 
-vcum1m = math.sum(value, 2)     //  1 min
-vcum3m = math.sum(value, 6)     //  3 min
-vcum5m = math.sum(value, 10)    //  5 min
-vcum10m = math.sum(value, 20)   // 10 min
+[_value, vcum1m,vcum3m,vcum5m,vcum10m] = request.security(syminfo.tickerid, "30S", [
+     value,
+     math.sum(value, 2),     //  1 min
+     math.sum(value, 6),     //  3 min
+     math.sum(value, 10),    //  5 min
+     math.sum(value, 20)     // 10 min
+     ], lookahead = barmerge.lookahead_on)
 
-vp99 = ta.percentile_nearest_rank(value, p99bars, p99)
-vp100 = ta.percentile_nearest_rank(value, p99bars, 100)
+
+[vp99,vp100] = request.security(syminfo.tickerid, "30S", [
+     ta.percentile_nearest_rank(value, p99bars, p99),
+     ta.percentile_nearest_rank(value, p99bars, 100)
+     ], lookahead = barmerge.lookahead_on)
 
 [vp99m1,vp100m1] = request.security(syminfo.tickerid, "1", [
      ta.percentile_nearest_rank(value, p99m1bars, p99m1),
@@ -90,8 +96,8 @@ vp100 = ta.percentile_nearest_rank(value, p99bars, 100)
      ], lookahead = barmerge.lookahead_on)
 
 
-isvalueP100 = value >= vp100
-isvalueP99 = value >= vp99
+isvalueP100 = _value >= vp100
+isvalueP99 = _value >= vp99
 
 isvcum1m = vcum1m >= vp99m1
 isvcum3m = vcum3m >= vp99m3
@@ -405,7 +411,9 @@ bgcolor(bgcolorall, editable = false, display = dispBg ? display.all : display.n
 // ALERTS
 
 var volume_max = 0.0
-volume_median_5000 = ta.median(value, 5000)
+[volume_median_5000] = request.security(syminfo.tickerid, "30S", [
+     ta.median(value, 5000)
+     ], lookahead = barmerge.lookahead_on)
 var volume_scale = float(na)
 if value > volume_max
     volume_max := value
