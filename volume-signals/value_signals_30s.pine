@@ -422,20 +422,18 @@ bgcolor(bgcolorall, editable = false, display = dispBg ? display.all : display.n
 // ALERTS
 
 var volume_max = 0.0
-[volume_median_5000] = request.security(syminfo.tickerid, "30S", [
-     ta.median(value, 5000)
-     ], lookahead = barmerge.lookahead_on)
+volume_median_5000 = ta.median(_value, 5000)
 var volume_scale = float(na)
-if value > volume_max
-    volume_max := value
+if _value > volume_max
+    volume_max := _value
 if barstate.islastconfirmedhistory
     //log.info("{0} {1}", math.ceil(math.log10(volume_max)), volume_max)
     volume_scale := math.ceil(math.log10(volume_median_5000))
 strVolume(float v) =>
     format = switch
-        volume_scale > 8 => str.format("{0,number,#.##}B", v / 1000000000)
-        volume_scale > 5 => str.format("{0,number,#.##}M", v /    1000000)
-        =>                  str.format("{0,number,#.##}K", v /       1000)
+        volume_scale >= 8 => str.format("{0,number,#.##}B", v / 1000000000)
+        volume_scale >= 5 => str.format("{0,number,#.##}M", v /    1000000)
+        =>                   str.format("{0,number,#.##}K", v /       1000)
     format
 strPrice(float v) =>
     var _scale = math.ceil(math.log10(syminfo.pricescale))
@@ -483,16 +481,16 @@ else
     na
 
 if isvalueP100 and notrig("huge")
-    alert(str.format( "{0} 30S Huge Volume {1}({2}) : {3}->{4} D {5} VWAP {6} {7} {8}", syminfo.ticker, strVolume(value), strPercent(value/volume_max), strPrice(prevnearestlevel), strPrice(nearestlevel), strPercent(deltaopen), strPercent(deltavwap), strUpDn(oc2-oc2[1]), istrig("big")?"SAME":"" ), alert.freq_all)
+    alert(str.format( "{0} 30S Huge Volume {1}({2}) : {3}->{4} D {5} VWAP {6} {7} {8}", syminfo.ticker, strVolume(_value), strPercent(_value/volume_max), strPrice(prevnearestlevel), strPrice(nearestlevel), strPercent(deltaopen), strPercent(deltavwap), strUpDn(oc2-oc2[1]), istrig("big")?"SAME":"" ), alert.freq_all)
     trig("huge")
 if isvalueP99 and notrig("big")
-    alert(str.format( "{0} 30S Big Volume {1}({2}) : {3}->{4} D {5} VWAP {6} {7}", syminfo.ticker, strVolume(value), strPercent(value/volume_max), strPrice(prevnearestlevel), strPrice(nearestlevel), strPercent(deltaopen), strPercent(deltavwap), strUpDn(oc2-oc2[1]) ), alert.freq_all)
+    alert(str.format( "{0} 30S Big Volume {1}({2}) : {3}->{4} D {5} VWAP {6} {7}", syminfo.ticker, strVolume(_value), strPercent(_value/volume_max), strPrice(prevnearestlevel), strPrice(nearestlevel), strPercent(deltaopen), strPercent(deltavwap), strUpDn(oc2-oc2[1]) ), alert.freq_all)
     trig("big")
 if isvcum1m and notrig("1mbig") and notrig("big") and notrig("huge") and not issamemintrigvalue
-    alert(str.format( "{0} 1m Big Volume {1}({2}) : {3}->{4} D {5} VWAP {6} {7} {8}", syminfo.ticker, strVolume(value), strPercent(vcum1m/volume_max), strPrice(prevnearestlevel), strPrice(nearestlevel), strPercent(deltaopen), strPercent(deltavwap), strUpDn(oc2-oc2[1]), istrig("big") or istrig("huge")?"SAME":"" ), alert.freq_all)
+    alert(str.format( "{0} 1m Big Volume {1}({2}) : {3}->{4} D {5} VWAP {6} {7} {8}", syminfo.ticker, strVolume(_value), strPercent(vcum1m/volume_max), strPrice(prevnearestlevel), strPrice(nearestlevel), strPercent(deltaopen), strPercent(deltavwap), strUpDn(oc2-oc2[1]), istrig("big") or istrig("huge")?"SAME":"" ), alert.freq_all)
     trig("1mbig")
 if vcum1m >= vp100m1 and notrig("1mhuge") and notrig("big") and notrig("huge") and not issamemintrigvalue
-    alert(str.format( "{0} 1m Huge Volume {1}({2}) : {3}->{4} D {5} VWAP {6} {7}", syminfo.ticker, strVolume(value), strPercent(vcum1m/volume_max), strPrice(prevnearestlevel), strPrice(nearestlevel), strPercent(deltaopen), strPercent(deltavwap), strUpDn(oc2-oc2[1]), istrig("big") or istrig("huge") or istrig("1mbig")?"SAME":"" ), alert.freq_all)
+    alert(str.format( "{0} 1m Huge Volume {1}({2}) : {3}->{4} D {5} VWAP {6} {7}", syminfo.ticker, strVolume(_value), strPercent(vcum1m/volume_max), strPrice(prevnearestlevel), strPrice(nearestlevel), strPercent(deltaopen), strPercent(deltavwap), strUpDn(oc2-oc2[1]), istrig("big") or istrig("huge") or istrig("1mbig")?"SAME":"" ), alert.freq_all)
     trig("1mhuge")
 
 iscrossedup = state_dn == StateLevel.crossed or state_dn == StateLevel.crossed_multiple
