@@ -455,6 +455,7 @@ deltavwap = (close - vwap) / vwap
 // plot(vwap, force_overlay = true)
 // plot(dayopen, force_overlay = true)
 
+issamemintrigvalue = second >= 30 and isanyval[1]
 
 // TODO
 if islqdt
@@ -468,10 +469,10 @@ if isvalueP100 and notrig("huge")
 if isvalueP99 and notrig("big")
     alert(str.format( "{0} 30S Big Volume {1}({2}) : {3}->{4} D {5} VWAP {6} {7}", syminfo.ticker, strVolume(value), strPercent(value/volume_max), strPrice(prevnearestlevel), strPrice(nearestlevel), strPercent(deltaopen), strPercent(deltavwap), strUpDn(oc2-oc2[1]) ), alert.freq_all)
     trig("big")
-if isvcum1m and notrig("1mbig") and notrig("big") and notrig("huge")
+if isvcum1m and notrig("1mbig") and notrig("big") and notrig("huge") and not issamemintrigvalue
     alert(str.format( "{0} 1m Big Volume {1}({2}) : {3}->{4} D {5} VWAP {6} {7} {8}", syminfo.ticker, strVolume(value), strPercent(vcum1m/volume_max), strPrice(prevnearestlevel), strPrice(nearestlevel), strPercent(deltaopen), strPercent(deltavwap), strUpDn(oc2-oc2[1]), istrig("big") or istrig("huge")?"SAME":"" ), alert.freq_all)
     trig("1mbig")
-if vcum1m >= vp100m1 and notrig("1mhuge") and notrig("big") and notrig("huge")
+if vcum1m >= vp100m1 and notrig("1mhuge") and notrig("big") and notrig("huge") and not issamemintrigvalue
     alert(str.format( "{0} 1m Huge Volume {1}({2}) : {3}->{4} D {5} VWAP {6} {7}", syminfo.ticker, strVolume(value), strPercent(vcum1m/volume_max), strPrice(prevnearestlevel), strPrice(nearestlevel), strPercent(deltaopen), strPercent(deltavwap), strUpDn(oc2-oc2[1]), istrig("big") or istrig("huge") or istrig("1mbig")?"SAME":"" ), alert.freq_all)
     trig("1mhuge")
 
