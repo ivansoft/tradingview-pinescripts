@@ -125,32 +125,42 @@ strstate(s) => switch s
 StateLevel state_up = na
 StateLevel state_dn = na
 txt = array.new<string>()
-level_crossed_arr = array.new<float>()
-level_crossed = float(na)
-level_touched = float(na)
-level_near = float(na)
-get_level_crossed() => level_crossed_arr.size() > 0 ? level_crossed_arr.last() : na
+price_level_crossed_arr = array.new<float>()
+price_level_crossed = float(na)
+price_level_touched = float(na)
+price_level_near = float(na)
+get_level_crossed() => price_level_crossed_arr.size() > 0 ? price_level_crossed_arr.last() : na
 
+type LevelStats
+    int count              // count of signals on the same level (same price) - used to reduce triggering
 type LevelInfo
-    int count_signals            // count of signals on the same level (same price) - used to reduce triggering
-    float level_price            // current level value - main, used for trigger detection
-    int index_firstsignal        // index of first signal
-    float prev_level_price       // last unique level vaue - direction detection
-    int prev_index_firstsignal
-    float last_bigval_level      // triggered on bars with isvalueP99/isvalueP100 ..
-var infolevel_crossed = LevelInfo.new(count_signals=0)
-var infolevel_touched = LevelInfo.new(count_signals=0)
-var infolevel_near = LevelInfo.new(count_signals=0)
+    LevelStats stats
+    float price            // current level value - main, used for trigger detection
+    int indexstart         // index of first signal
+type LevelContext
+    LevelInfo curr
+    LevelInfo prev         // last unique level vaue - direction information
+    LevelInfo bigval       // triggered on bars with isvalueP99/isvalueP100 ..
+create_levelinfo() => LevelInfo.new(stats=LevelStats.new(count=0))
+create_levelcontext() => LevelContext.new(create_levelinfo(), create_levelinfo(), create_levelinfo())
+var level_crossed = create_levelcontext()
+var level_touched = create_levelcontext()
+var level_near = create_levelcontext()
+deepcopy_levelinfo(LevelInfo frominfo, LevelInfo toinfo) =>
+    toinfo.price := frominfo.price
+    toinfo.indexstart := frominfo.indexstart
+    toinfo.stats.count := frominfo.stats.count
 
-endofbar_update_levelinfo_price(LevelInfo info, float level_price) =>
-    if not na(level_price)
-        info.level_price := level_price
+endofbar_update_levelinfo_price(LevelContext level, float price) =>
+    if not na(price)
+        level.curr.price := price
         if isanyval
-            info.last_bigval_level := level_price
+            level.bigval.price := price
 endofbar_levelinfo() =>
-    endofbar_update_levelinfo_price(infolevel_crossed, level_crossed)
-    endofbar_update_levelinfo_price(infolevel_touched, level_touched)
-    endofbar_update_levelinfo_price(infolevel_near, level_near)
+    endofbar_update_levelinfo_price(level_crossed, price_level_crossed)
+    endofbar_update_levelinfo_price(level_touched, price_level_touched)
+    endofbar_update_levelinfo_price(level_near, price_level_near)
+
 
 barsanyval = ta.barssince(isanyval)
 barsanycum = ta.barssince(isanyval)
@@ -187,30 +197,30 @@ if barstate.isconfirmed and not islqdt
         from_num = close[1] == closeint_ceil[1] ? closeint_ceil[1] + step1 : closeint_ceil[1]
         to_num = closeint_floor
         for level = from_num to to_num by step1
-            level_crossed_arr.push(level)
-            infolevel_crossed.count_signals := infolevel_crossed.count_signals + 1
+            price_level_crossed_arr.push(level)
+            level_crossed.curr.stats.count := level_crossed.curr.stats.count + 1
             txt.push(str.format("{0}@",level))
         state_up := txt.size() > 1 ? StateLevel.crossed_multiple : StateLevel.crossed
     else if closeint_ceil[1] < openint_floor
         from_num = close[1] == closeint_ceil[1] ? closeint_ceil[1] + step1 : closeint_ceil[1]
         to_num = openint_floor
         for level = from_num to to_num by step1
-            level_crossed_arr.push(level)
-            infolevel_crossed.count_signals := infolevel_crossed.count_signals + 1
+            price_level_crossed_arr.push(level)
+            level_crossed.curr.stats.count := level_crossed.curr.stats.count + 1
             txt.push(str.format("{0}@",level))
         state_up := txt.size() > 1 ? StateLevel.crossed_multiple : StateLevel.crossed
     else if closeint_ceil[1] == closeint_floor and lastdirection(closeint_floor) < 0 and
          (close[1] < close) and
          (close[1] <= closeint_ceil[1] and closeint_ceil[1] < close)
-        level_crossed_arr.push(closeint_floor)
-        infolevel_crossed.count_signals := infolevel_crossed.count_signals + 1
+        price_level_crossed_arr.push(closeint_floor)
+        level_crossed.curr.stats.count := level_crossed.curr.stats.count + 1
         txt.push(str.format("{0}^{1}",closeint_floor,lvl(closeint_floor)))
         state_up := StateLevel.crossed
     else if closeint_ceil[1] == openint_floor and lastdirection(openint_floor) < 0 and
          (close[1] < open) and
          (close[1] <= closeint_ceil[1] and closeint_ceil[1] < open)
-        level_crossed_arr.push(openint_floor)
-        infolevel_crossed.count_signals := infolevel_crossed.count_signals + 1
+        price_level_crossed_arr.push(openint_floor)
+        level_crossed.curr.stats.count := level_crossed.curr.stats.count + 1
         txt.push(str.format("{0}*{1}",openint_floor,lvl(openint_floor)))
         state_up := StateLevel.crossed
         if closeint_floor[1] == closeint_ceil and openint_floor == closeint_ceil and
@@ -223,30 +233,30 @@ if barstate.isconfirmed and not islqdt
         from_num = close[1] == closeint_floor[1] ? closeint_floor[1] - step1 : closeint_floor[1]
         to_num = closeint_ceil
         for level = from_num to to_num by step1
-            level_crossed_arr.push(level)
-            infolevel_crossed.count_signals := infolevel_crossed.count_signals + 1
+            price_level_crossed_arr.push(level)
+            level_crossed.curr.stats.count := level_crossed.curr.stats.count + 1
             txt.push(str.format("{0}@",level))
         state_dn := txt.size() > 1 ? StateLevel.crossed_multiple : StateLevel.crossed
     else if closeint_floor[1] > openint_ceil
         from_num = close[1] == closeint_floor[1] ? closeint_floor[1] - step1 : closeint_floor[1]
         to_num = openint_ceil
         for level = from_num to to_num by step1
-            level_crossed_arr.push(level)
-            infolevel_crossed.count_signals := infolevel_crossed.count_signals + 1
+            price_level_crossed_arr.push(level)
+            level_crossed.curr.stats.count := level_crossed.curr.stats.count + 1
             txt.push(str.format("{0}@",level))
         state_dn := txt.size() > 1 ? StateLevel.crossed_multiple : StateLevel.crossed
     else if closeint_floor[1] == closeint_ceil and lastdirection(closeint_ceil) > 0 and
          (close[1] > close) and
          (close < closeint_floor[1] and closeint_floor[1] <= close[1])
-        level_crossed_arr.push(closeint_ceil)
-        infolevel_crossed.count_signals := infolevel_crossed.count_signals + 1
+        price_level_crossed_arr.push(closeint_ceil)
+        level_crossed.curr.stats.count := level_crossed.curr.stats.count + 1
         txt.push(str.format("{0}v{1}",closeint_ceil,lvl(closeint_ceil)))
         state_dn := StateLevel.crossed
     else if closeint_floor[1] == openint_ceil and lastdirection(closeint_ceil) > 0 and
          (close[1] > open) and
          (open < closeint_floor[1] and closeint_floor[1] <= close[1])
-        level_crossed_arr.push(openint_ceil)
-        infolevel_crossed.count_signals := infolevel_crossed.count_signals + 1
+        price_level_crossed_arr.push(openint_ceil)
+        level_crossed.curr.stats.count := level_crossed.curr.stats.count + 1
         txt.push(str.format("{0}*{1}",openint_ceil,lvl(closeint_ceil)))
         state_dn := StateLevel.crossed
         if closeint_ceil[1] == closeint_floor and openint_ceil == closeint_floor and
@@ -257,22 +267,22 @@ if barstate.isconfirmed and not islqdt
 
     if highint_ceil - math.max(close, open) < roundzone1
         if lastdirection(highint_ceil) < 0
-            level_near := highint_ceil
-            infolevel_near.count_signals := infolevel_near.count_signals + 1
+            price_level_near := highint_ceil
+            level_near.curr.stats.count := level_near.curr.stats.count + 1
             txt.push(str.format("under {0}",highint_ceil))
             state_up := StateLevel.near
 
     if math.min(close, open) - lowint_floor < roundzone1
         if lastdirection(lowint_floor) > 0
-            level_near := lowint_floor
-            infolevel_near.count_signals := infolevel_near.count_signals + 1
+            price_level_near := lowint_floor
+            level_near.curr.stats.count := level_near.curr.stats.count + 1
             txt.push(str.format("above {0}",lowint_floor))
             state_dn := StateLevel.near
 
     if (low < highint_floor and highint_floor <= high) and math.max(close, open) <= highint_floor
         if lastdirection(highint_floor) < 0
-            level_touched := highint_floor
-            infolevel_touched.count_signals := infolevel_touched.count_signals + 1
+            price_level_touched := highint_floor
+            level_touched.curr.stats.count := level_touched.curr.stats.count + 1
             if high > highint_floor
                 txt.push(str.format("touched {0}",highint_floor))
                 state_up := StateLevel.touched
@@ -282,8 +292,8 @@ if barstate.isconfirmed and not islqdt
 
     if (low <= lowint_ceil and lowint_ceil < high) and math.min(close, open) >= lowint_ceil
         if lastdirection(lowint_ceil) > 0
-            level_touched := lowint_ceil
-            infolevel_touched.count_signals := infolevel_touched.count_signals + 1
+            price_level_touched := lowint_ceil
+            level_touched.curr.stats.count := level_touched.curr.stats.count + 1
             if low < lowint_ceil
                 txt.push(str.format("touched {0}",lowint_ceil))
                 state_dn := StateLevel.touched
@@ -294,7 +304,18 @@ if barstate.isconfirmed and not islqdt
     // if timestamp("27 Feb 2025 22:56:00 GMT+3") <= time and time <= timestamp("27 Feb 2025 22:58:00 GMT+3")
     //     log.info("{0} {1} {2} {3} {4}", strstate(state_up), strstate(state_dn), closeint_floor[1], closeint_ceil, lastdirection(closeint_ceil))
 
-level_crossed := get_level_crossed()
+price_level_crossed := get_level_crossed()
+
+islevelchanged(float currvalue, float lastvalue) =>
+    not na(currvalue) and not na(lastvalue) and currvalue != lastvalue
+check_level_changed(LevelContext level, float price) =>
+    if islevelchanged(price, level.curr.price)
+        deepcopy_levelinfo(frominfo=level.curr, toinfo=level.prev)
+        level.curr.stats.count := 0
+        level.curr.indexstart := bar_index
+check_level_changed(level_crossed, price_level_crossed)
+check_level_changed(level_touched, price_level_touched)
+check_level_changed(level_near, price_level_near)
 
 
 boostmult(count) =>
@@ -316,7 +337,7 @@ method boostcond(BoostCondCtx ctx, counter,limit=0,perbars=0) =>
     mult = boostmult(counter)
     cond = counter % mult == 0
     // if timestamp("26 Feb 2025 11:30:00 GMT+3") <= time and time <= timestamp("26 Feb 2025 13:45:00 GMT+3")
-    //     log.info("{0} {1} : {2} % {3} = {4} - [{5}] {6} {7} : {8}", level_near, last_level_near, counter, mult, cond, ctx.name, limit, ctx.condcount, bar_index - ctx.condindex)
+    //     log.info("{0} {1} : {2} % {3} = {4} - [{5}] {6} {7} : {8}", price_level_near, last_level_near, counter, mult, cond, ctx.name, limit, ctx.condcount, bar_index - ctx.condindex)
     if limit > 0
         if ctx.condindex > 0
             if bar_index - ctx.condindex > perbars  // limit exceeded
@@ -333,19 +354,6 @@ method boostcond(BoostCondCtx ctx, counter,limit=0,perbars=0) =>
 var ctxcross = BoostCondCtx.new(0,0,"cross")
 var ctxnear = BoostCondCtx.new(0,0,"near")
 //var ctxshared = BoostCondCtx.new(0,0,"shared")
-
-
-islevelchanged(float currvalue, float lastvalue) =>
-    not na(currvalue) and not na(lastvalue) and currvalue != lastvalue
-check_level_changed(LevelInfo info, float level) =>
-    if islevelchanged(level, info.level_price)
-        info.prev_level_price := info.level_price
-        info.prev_index_firstsignal := info.index_firstsignal
-        info.count_signals := 0
-        info.index_firstsignal := bar_index
-check_level_changed(infolevel_crossed, level_crossed)
-check_level_changed(infolevel_touched, level_touched)
-check_level_changed(infolevel_near, level_near)
 
 
 printLabelUp(cond) =>
@@ -365,7 +373,7 @@ if dispLabels
         StateLevel.touched =>
             if isanyval
                 debugLabelUp(txt.join(","))
-        StateLevel.near => printLabelUp(ctxnear.boostcond(math.min(infolevel_near.count_signals,barsanyval),1,150))
+        StateLevel.near => printLabelUp(ctxnear.boostcond(math.min(level_near.curr.stats.count,barsanyval),1,150))
     switch state_dn
         StateLevel.crossed_multiple => debugLabelDn(txt.join(","))  // printLabelDn(ctxshared.boostcond(level_crossed_count))
         StateLevel.crossed => debugLabelDn(txt.join(","))  // printLabelDn(ctxcross.boostcond(math.min(level_crossed_count,barsanyval),1,50))
@@ -375,7 +383,7 @@ if dispLabels
         StateLevel.touched =>
             if isanyval
                 debugLabelDn(txt.join(","))
-        StateLevel.near => printLabelDn(ctxnear.boostcond(math.min(infolevel_near.count_signals,barsanyval),1,150))
+        StateLevel.near => printLabelDn(ctxnear.boostcond(math.min(level_near.curr.stats.count,barsanyval),1,150))
 
 
 colorplotvalue = switch
@@ -447,15 +455,15 @@ notrig(v) => not triggrered.contains(v)
 trig(v) => triggrered.put(v,true)
 
 
-nearestlevel = switch math.max(infolevel_crossed.index_firstsignal, infolevel_touched.index_firstsignal, infolevel_near.index_firstsignal)
-    infolevel_crossed.index_firstsignal => infolevel_crossed.level_price
-    infolevel_touched.index_firstsignal => infolevel_touched.level_price
-    infolevel_near.index_firstsignal => infolevel_near.level_price
+nearestlevel = switch math.max(level_crossed.curr.indexstart, level_touched.curr.indexstart, level_near.curr.indexstart)
+    level_crossed.curr.indexstart => level_crossed.curr.price
+    level_touched.curr.indexstart => level_touched.curr.price
+    level_near.curr.indexstart => level_near.curr.price
     => na
-prevnearestlevel = switch math.max(infolevel_crossed.prev_index_firstsignal, infolevel_touched.prev_index_firstsignal, infolevel_near.prev_index_firstsignal)
-    infolevel_crossed.prev_index_firstsignal => infolevel_crossed.prev_level_price
-    infolevel_touched.prev_index_firstsignal => infolevel_touched.prev_level_price
-    infolevel_near.prev_index_firstsignal => infolevel_near.prev_level_price
+prevnearestlevel = switch math.max(level_crossed.prev.indexstart, level_touched.prev.indexstart, level_near.prev.indexstart)
+    level_crossed.prev.indexstart => level_crossed.prev.price
+    level_touched.prev.indexstart => level_touched.prev.price
+    level_near.prev.indexstart => level_near.prev.price
     => na
 
 dayopen = open[ta.barssince(ta.change(dayofmonth) != 0)]
@@ -492,10 +500,10 @@ iscrosseddn = state_up == StateLevel.crossed or state_up == StateLevel.crossed_m
 
 var last_triggered_level = float(na)
 // if iscrossedup or iscrosseddn
-//     log.info("{0} {1} {2} {3} : {4}", iscrossedup, iscrosseddn, last_triggered_level != level_crossed, notrig("level"), islevelchanged(level_crossed, last_level_crossed))
-if ((iscrossedup or iscrosseddn) and last_triggered_level != level_crossed) and notrig("level")
-    alert(str.format( "{0} 30S Cross Level {1}->{2} D {3} VWAP {4} {5}", syminfo.ticker, strPrice(infolevel_crossed.level_price), strPrice(level_crossed), strPercent(deltaopen), strPercent(deltavwap), strUpDn(level_crossed-infolevel_crossed.level_price) ), alert.freq_all)
-    last_triggered_level := level_crossed
+//     log.info("{0} {1} {2} {3} : {4}", iscrossedup, iscrosseddn, last_triggered_level != price_level_crossed, notrig("level"), islevelchanged(price_level_crossed, last_level_crossed))
+if ((iscrossedup or iscrosseddn) and last_triggered_level != price_level_crossed) and notrig("level")
+    alert(str.format( "{0} 30S Cross Level {1}->{2} D {3} VWAP {4} {5}", syminfo.ticker, strPrice(level_crossed.curr.price), strPrice(price_level_crossed), strPercent(deltaopen), strPercent(deltavwap), strUpDn(price_level_crossed-level_crossed.curr.price) ), alert.freq_all)
+    last_triggered_level := price_level_crossed
     trig("level")
 
 
