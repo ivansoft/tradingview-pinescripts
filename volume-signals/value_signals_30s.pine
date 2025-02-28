@@ -137,17 +137,20 @@ type LevelInfo
     int index_firstsignal        // index of first signal
     float prev_level_price       // last unique level vaue - direction detection
     int prev_index_firstsignal
+    float last_bigval_level      // triggered on bars with isvalueP99/isvalueP100 ..
 var infolevel_crossed = LevelInfo.new(count_signals=0)
 var infolevel_touched = LevelInfo.new(count_signals=0)
 var infolevel_near = LevelInfo.new(count_signals=0)
 
+endofbar_update_levelinfo_price(LevelInfo info, float level_price) =>
+    if not na(level_price)
+        info.level_price := level_price
+        if isanyval
+            info.last_bigval_level := level_price
 endofbar_levelinfo() =>
-    if not na(level_crossed)
-        infolevel_crossed.level_price := level_crossed
-    if not na(level_touched)
-        infolevel_touched.level_price := level_touched
-    if not na(level_near)
-        infolevel_near.level_price := level_near
+    endofbar_update_levelinfo_price(infolevel_crossed, level_crossed)
+    endofbar_update_levelinfo_price(infolevel_touched, level_touched)
+    endofbar_update_levelinfo_price(infolevel_near, level_near)
 
 barsanyval = ta.barssince(isanyval)
 barsanycum = ta.barssince(isanyval)
@@ -332,9 +335,9 @@ var ctxnear = BoostCondCtx.new(0,0,"near")
 //var ctxshared = BoostCondCtx.new(0,0,"shared")
 
 
-islevelchanged(currvalue,lastvalue) =>
+islevelchanged(float currvalue, float lastvalue) =>
     not na(currvalue) and not na(lastvalue) and currvalue != lastvalue
-check_level_changed(LevelInfo info, level) =>
+check_level_changed(LevelInfo info, float level) =>
     if islevelchanged(level, info.level_price)
         info.prev_level_price := info.level_price
         info.prev_index_firstsignal := info.index_firstsignal
