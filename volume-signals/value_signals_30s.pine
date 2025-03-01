@@ -558,12 +558,12 @@ alertinfoprice() => switch
     islqdt => str.format("{0}->{1}", strPrice(dayopen), strPrice(close))
     =>
         switch
-            iscrossedup => str.format("^ {0}->{1}", strPrice(prevbigvalcrossed()), strPrice(price_level_crossed))
-            iscrosseddn => str.format("v {0}->{1}", strPrice(prevbigvalcrossed()), strPrice(price_level_crossed))
-            ishitup => str.format("^^ {0}", strPrice(price_level_touched))
-            ishitdn => str.format("vv {0}", strPrice(price_level_touched))
-            isunderup => str.format("~^~ {0}", strPrice(price_level_near))
-            isabovedn => str.format("~v~ {0}", strPrice(price_level_near))
+            iscrossedup => str.format("▲ {0}->{1}", strPrice(prevbigvalcrossed()), strPrice(price_level_crossed))
+            iscrosseddn => str.format("▼ {0}->{1}", strPrice(prevbigvalcrossed()), strPrice(price_level_crossed))
+            ishitup => str.format("┴ {0}", strPrice(price_level_touched))
+            ishitdn => str.format("┬ {0}", strPrice(price_level_touched))
+            isunderup => str.format("͡  {0}", strPrice(price_level_near))
+            isabovedn => str.format("͜  {0}", strPrice(price_level_near))
 
 alertinfodaychange() => switch
     islqdt => ""
