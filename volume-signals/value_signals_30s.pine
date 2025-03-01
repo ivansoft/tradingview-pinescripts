@@ -181,7 +181,6 @@ type LevelContext
     LevelInfo curr
     array<LevelInfo> val     // last unique level values
     array<LevelInfo> bigval  // triggered on bars with isvalueP99/isvalueP100 ..
-method prev(LevelContext ctx) => ctx.val.get(0)
 create_levelinfo() => LevelInfo.new(stats=LevelStats.new(count=0))
 create_levelcontext() => LevelContext.new(curr=create_levelinfo(),val=array.from(create_levelinfo()),bigval=array.from(create_levelinfo()))
 var level_crossed = create_levelcontext()
@@ -417,10 +416,10 @@ nearestlevel() => switch math.max(level_crossed.curr.indexstart, level_touched.c
 prevnearestlevel() => switch
     math.min(level_crossed.val.size(), level_touched.val.size(), level_near.val.size()) < 1 => nearestlevel()
     =>
-        switch math.max(level_crossed.prev().indexstart, level_touched.prev().indexstart, level_near.prev().indexstart)
-            level_crossed.prev().indexstart => level_crossed.prev().price
-            level_touched.prev().indexstart => level_touched.prev().price
-            level_near.prev().indexstart => level_near.prev().price
+        switch math.max(level_crossed.val.get(0).indexstart, level_touched.val.get(0).indexstart, level_near.val.get(0).indexstart)
+            level_crossed.val.get(0).indexstart => level_crossed.val.get(0).price
+            level_touched.val.get(0).indexstart => level_touched.val.get(0).price
+            level_near.val.get(0).indexstart => level_near.val.get(0).price
             => nearestlevel()
 prevnearestlevelbigval() => switch
     math.min(level_crossed.bigval.size(), level_touched.bigval.size(), level_near.bigval.size()) < 2 => prevnearestlevel()
@@ -439,9 +438,9 @@ nearestnearlevel() => switch math.max(level_touched.curr.indexstart, level_near.
 prevnearestnearlevel() => switch
     math.min(level_touched.val.size(), level_near.val.size()) < 1 => nearestnearlevel()
     =>
-        switch math.max(level_touched.prev().indexstart, level_near.prev().indexstart)
-            level_touched.prev().indexstart => level_touched.prev().price
-            level_near.prev().indexstart => level_near.prev().price
+        switch math.max(level_touched.val.get(0).indexstart, level_near.val.get(0).indexstart)
+            level_touched.val.get(0).indexstart => level_touched.val.get(0).price
+            level_near.val.get(0).indexstart => level_near.val.get(0).price
             => nearestnearlevel()
 prevnearestnearlevelbigval() => switch
     math.min(level_touched.bigval.size(), level_near.bigval.size()) < 2 => prevnearestnearlevel()
@@ -454,9 +453,9 @@ prevnearestnearlevelbigval() => switch
 nearestprice() => nz(price_level_crossed, nz(price_level_near, price_level_touched))
 nearestnearprice() => nz(price_level_near, price_level_touched)
 
-prevbigvalcrossed() => nz(level_crossed.prev().price, nz(level_crossed.prev().price, level_crossed.curr.price))
-prevbigvaltouched() => nz(level_touched.prev().price, nz(level_touched.prev().price, level_touched.curr.price))
-prevbigvalnear()    => nz(level_near.prev().price,    nz(level_near.prev().price,    level_near.curr.price))
+prevbigvalcrossed() => nz(level_crossed.val.get(0).price, nz(level_crossed.val.get(0).price, level_crossed.curr.price))
+prevbigvaltouched() => nz(level_touched.val.get(0).price, nz(level_touched.val.get(0).price, level_touched.curr.price))
+prevbigvalnear()    => nz(level_near.val.get(0).price,    nz(level_near.val.get(0).price,    level_near.curr.price))
 
 
 dayopen = open[ta.barssince(ta.change(dayofmonth) != 0)]
