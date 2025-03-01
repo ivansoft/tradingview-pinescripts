@@ -445,7 +445,7 @@ debuglables() =>
     if not na(state_up)
         debugLabelUp(txt.join(","))
     if not na(state_dn)
-        debugLabelUp(txt.join(","))
+        debugLabelDn(txt.join(","))
 
 // if dispLabels
 //     debuglables2()
@@ -564,6 +564,7 @@ alertinfoprice() => switch
             ishitdn => str.format("┬ {0}", strPrice(price_level_touched))
             isunderup => str.format("͡  {0}", strPrice(price_level_near))
             isabovedn => str.format("͜  {0}", strPrice(price_level_near))
+            => str.format("{0}", strPrice(nearestlevel()))
 
 alertinfodaychange() => switch
     islqdt => ""
