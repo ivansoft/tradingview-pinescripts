@@ -517,6 +517,7 @@ prevbigvaltouched() => nz(level_touched.prev().price, nz(level_touched.prev().pr
 prevbigvalnear()    => nz(level_near.prev().price,    nz(level_near.prev().price,    level_near.curr.price))
 
 
+varip float tickprice = na
 dayopen = open[ta.barssince(ta.change(dayofmonth) != 0)]
 deltaopen = (close - dayopen) / dayopen
 oc2 = (open + close) / 2
@@ -525,11 +526,6 @@ deltavwap = (close - vwap) / vwap
 // plot(vwap, force_overlay = true)
 // plot(dayopen, force_overlay = true)
 
-// TODO
-if islqdt
-    na
-else
-    na
 
 iscrossedup = state_up == StateLevel.crossed or state_up == StateLevel.crossed_multiple
 iscrosseddn = state_dn == StateLevel.crossed or state_dn == StateLevel.crossed_multiple
@@ -543,24 +539,30 @@ priceinfobigval = switch
     isunderup => str.format("^^ {0}", strPrice(nearestnearprice()))
     isabovedn => str.format("vv {0}", strPrice(nearestnearprice()))
 
+pricechangeinfo = str.format("D {0} VWAP {1} {2}", strPercent(deltaopen), strPercent(deltavwap), strUpDn(oc2-oc2[1]))
+
+if islqdt
+    priceinfobigval := str.format("{0}->{1}", strPrice(dayopen), strPrice(close))
+    pricechangeinfo := str.format("Tick {0}", strUpDn(close-tickprice))
+
 notrigval = notrig("big") and notrig("huge")
 
 if isvalueP100 and notrig("huge")
-    alert(str.format( "{0} 30S Huge Volume {1}({2}) : {3} D {4} VWAP {5} {6} {7}", syminfo.ticker, strVolume(_value), strPercent(_value/volume_max), priceinfobigval, strPercent(deltaopen), strPercent(deltavwap), strUpDn(oc2-oc2[1]), istrig("big")?"SAME":"" ), alert.freq_all)
+    alert(str.format( "{0} 30S Huge Volume {1}({2}) : {3} {4} {5}", syminfo.ticker, strVolume(_value), strPercent(_value/volume_max), priceinfobigval, pricechangeinfo, istrig("big")?"SAME":"" ), alert.freq_all)
     trig("huge")
 if isvalueP99 and notrig("big")
-    alert(str.format( "{0} 30S Big Volume {1}({2}) : {3} D {4} VWAP {5} {6}", syminfo.ticker, strVolume(_value), strPercent(_value/volume_max), priceinfobigval, strPercent(deltaopen), strPercent(deltavwap), strUpDn(oc2-oc2[1]) ), alert.freq_all)
+    alert(str.format( "{0} 30S Big Volume {1}({2}) : {3} {4}", syminfo.ticker, strVolume(_value), strPercent(_value/volume_max), priceinfobigval, pricechangeinfo ), alert.freq_all)
     trig("big")
 if isvcum1m and notrig("1mbig") and notrigval and not isanyval[1]
-    alert(str.format( "{0} 1m Big Volume {1}({2}) : {3} D {4} VWAP {5} {6} {7}", syminfo.ticker, strVolume(_value), strPercent(vcum1m/volume_max), priceinfobigval, strPercent(deltaopen), strPercent(deltavwap), strUpDn(oc2-oc2[1]), istrig("big") or istrig("huge")?"SAME":"" ), alert.freq_all)
+    alert(str.format( "{0} 1m Big Volume {1}({2}) : {3} {4} {5}", syminfo.ticker, strVolume(_value), strPercent(vcum1m/volume_max), priceinfobigval, pricechangeinfo, istrig("big") or istrig("huge")?"SAME":"" ), alert.freq_all)
     trig("1mbig")
 if vcum1m >= vp100m1 and notrig("1mhuge") and notrigval and not isanyval[1]
-    alert(str.format( "{0} 1m Huge Volume {1}({2}) : {3} D {4} VWAP {5} {6}", syminfo.ticker, strVolume(_value), strPercent(vcum1m/volume_max), priceinfobigval, strPercent(deltaopen), strPercent(deltavwap), strUpDn(oc2-oc2[1]), istrig("big") or istrig("huge") or istrig("1mbig")?"SAME":"" ), alert.freq_all)
+    alert(str.format( "{0} 1m Huge Volume {1}({2}) : {3} {4}", syminfo.ticker, strVolume(_value), strPercent(vcum1m/volume_max), priceinfobigval, pricechangeinfo, istrig("big") or istrig("huge") or istrig("1mbig")?"SAME":"" ), alert.freq_all)
     trig("1mhuge")
 
 // if (iscrossedup or iscrosseddn) and islevelchanged(price_level_crossed, level_crossed.curr.price)
 //     log.info("{0} {1} : {2} - {3}", iscrossedup, iscrosseddn, islevelchanged(price_level_crossed, level_crossed.curr.price), notrig("level"))
-if (iscrossedup or iscrosseddn) and islevelchanged(price_level_crossed, level_crossed.curr.price) and notrig("level") and notrigval
+if (iscrossedup or iscrosseddn) and islevelchanged(price_level_crossed, level_crossed.curr.price) and notrig("level") and notrigval and not islqdt
     alert(str.format( "{0} 30S Cross Level {1}->{2} D {3} VWAP {4} {5}", syminfo.ticker, strPrice(level_crossed.curr.price), strPrice(price_level_crossed), strPercent(deltaopen), strPercent(deltavwap), strUpDn(price_level_crossed-level_crossed.curr.price) ), alert.freq_all)
     trig("level")
 
@@ -570,6 +572,7 @@ if (iscrossedup or iscrosseddn) and islevelchanged(price_level_crossed, level_cr
 
 
 // EOB - End of Bar
+tickprice := close
 
 endofbar_update_levelinfo_price(level_crossed, price_level_crossed)
 endofbar_update_levelinfo_price(level_touched, price_level_touched)
