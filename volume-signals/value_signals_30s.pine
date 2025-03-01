@@ -426,9 +426,9 @@ prevnearestlevelbigval() => switch
     math.min(level_crossed.bigval.size(), level_touched.bigval.size(), level_near.bigval.size()) < 2 => prevnearestlevel()
     =>
         switch math.max(level_crossed.bigval.get(1).indexstart, level_touched.bigval.get(1).indexstart, level_near.bigval.get(1).indexstart)
-            level_crossed.prev().indexstart => level_crossed.prev().price
-            level_touched.prev().indexstart => level_touched.prev().price
-            level_near.prev().indexstart => level_near.prev().price
+            level_crossed.bigval.get(1).indexstart => level_crossed.bigval.get(1).price
+            level_touched.bigval.get(1).indexstart => level_touched.bigval.get(1).price
+            level_near.bigval.get(1).indexstart => level_near.bigval.get(1).price
             => prevnearestlevel()
 
 /// --- nearest in history - "-" crossed
@@ -447,8 +447,8 @@ prevnearestnearlevelbigval() => switch
     math.min(level_touched.bigval.size(), level_near.bigval.size()) < 2 => prevnearestnearlevel()
     =>
         switch math.max(level_touched.bigval.get(1).indexstart, level_near.bigval.get(1).indexstart)
-            level_touched.prev().indexstart => level_touched.prev().price
-            level_near.prev().indexstart => level_near.prev().price
+            level_touched.bigval.get(1).indexstart => level_touched.bigval.get(1).price
+            level_near.bigval.get(1).indexstart => level_near.bigval.get(1).price
             => prevnearestnearlevel()
 
 nearestprice() => nz(price_level_crossed, nz(price_level_near, price_level_touched))
