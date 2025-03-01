@@ -399,14 +399,6 @@ strPrice(float v) =>
 strPercent(float v) => str.format("{0,number,#.#}%", v*100)
 strUpDn(float v) => v > 0 ? "Up" : v < 0 ? "Dn" : "Flat"
 
-varip triggrered = map.new<string,bool>()
-if barstate.isnew
-    triggrered.clear()
-istrig(v) => triggrered.contains(v)
-notrig(v) => not triggrered.contains(v)
-trig(v) => triggrered.put(v,true)
-
-varip float tickprice = na
 
 dayopen = open[ta.barssince(ta.change(dayofmonth) != 0)]
 deltaopen = (close - dayopen) / dayopen
@@ -476,7 +468,7 @@ iscrosseddn = state_dn == StateLevel.crossed or state_dn == StateLevel.crossed_m
 isunderup = state_up == StateLevel.near or state_up == StateLevel.reached or state_up == StateLevel.touched
 isabovedn = state_dn == StateLevel.near or state_dn == StateLevel.reached or state_dn == StateLevel.touched
 
-priceinfobigval() => switch
+alertinfoprice() => switch
     islqdt => str.format("{0}->{1}", strPrice(dayopen), strPrice(close))
     =>
         switch
@@ -485,40 +477,36 @@ priceinfobigval() => switch
             isunderup => str.format("^^ {0}", strPrice(nearestnearprice()))
             isabovedn => str.format("vv {0}", strPrice(nearestnearprice()))
 
-pricechangeinfo() => switch
-    islqdt => str.format("Tick {0}", strUpDn(close-tickprice))
-    =>
-        str.format("D {0} VWAP {1} {2}", strPercent(deltaopen), strPercent(deltavwap), strUpDn(oc2-oc2[1]))
+alertinfodaychange() => switch
+    islqdt => ""
+    => str.format("D {0} VWAP {1}", strPercent(deltaopen), strPercent(deltavwap))
 
+// The function "alertinfodirection" should be called on each calculation for consistency. It is recommended to extract the call from this scope
+alertinfodirection = switch
+    islqdt => str.format("{0}", strUpDn(close-close[1]))
+    => str.format("{0}", strUpDn(oc2-oc2[1]))
 
-notrigval = notrig("big") and notrig("huge")
-
-if isvalueP100 and notrig("huge")
-    alert(str.format( "{0} 30S Huge Volume {1}({2}) : {3} {4} {5}", syminfo.ticker, strVolume(_value), strPercent(_value/volume_max), priceinfobigval(), pricechangeinfo(), istrig("big")?"SAME":"" ), alert.freq_all)
-    trig("huge")
-if isvalueP99 and notrig("big")
-    alert(str.format( "{0} 30S Big Volume {1}({2}) : {3} {4}", syminfo.ticker, strVolume(_value), strPercent(_value/volume_max), priceinfobigval(), pricechangeinfo() ), alert.freq_all)
-    trig("big")
-if isvcum1m and notrig("1mbig") and notrigval and not isanyval[1]
-    alert(str.format( "{0} 1m Big Volume {1}({2}) : {3} {4} {5}", syminfo.ticker, strVolume(_value), strPercent(vcum1m/volume_max), priceinfobigval(), pricechangeinfo(), istrig("big") or istrig("huge")?"SAME":"" ), alert.freq_all)
-    trig("1mbig")
-if vcum1m >= vp100m1 and notrig("1mhuge") and notrigval and not isanyval[1]
-    alert(str.format( "{0} 1m Huge Volume {1}({2}) : {3} {4}", syminfo.ticker, strVolume(_value), strPercent(vcum1m/volume_max), priceinfobigval(), pricechangeinfo(), istrig("big") or istrig("huge") or istrig("1mbig")?"SAME":"" ), alert.freq_all)
-    trig("1mhuge")
-
-
-if (iscrossedup or iscrosseddn) and islevelchanged(price_level_crossed, level_crossed.curr.price) and notrig("level") and notrigval and not islqdt
-    alert(str.format( "{0} 30S Cross Level {1}->{2} D {3} VWAP {4} {5}", syminfo.ticker, strPrice(level_crossed.curr.price), strPrice(price_level_crossed), strPercent(deltaopen), strPercent(deltavwap), strUpDn(price_level_crossed-level_crossed.curr.price) ), alert.freq_all)
-    trig("level")
 
 levelnearstatscount = math.max(level_near.curr.stats.count, level_touched.curr.stats.count)
 var triggerscountnear = 0
 if islevelchanged(price_level_near, level_near.curr.price) or islevelchanged(price_level_touched, level_touched.curr.price)
     triggerscountnear := 0
-if (isunderup or isabovedn) and (levelnearstatscount >= 3 and levelnearstatscount % 3 == 0 and triggerscountnear < 3) and notrig("near")
-    alert(str.format( "{0} 30S Near Level {1} D {3} VWAP {4} {5}", syminfo.ticker, priceinfobigval(), strPercent(deltaopen), strPercent(deltavwap), strUpDn(nearestnearprice()-prevnearestnearlevel()) ), alert.freq_all)
+
+if isvalueP100
+    alert(str.format( "{0} 30S Huge Volume {1}({2}) : {3} {4} {5}", syminfo.ticker, strVolume(_value), strPercent(_value/volume_max), alertinfoprice(), alertinfodaychange(), alertinfodirection ), alert.freq_once_per_bar_close)
+else if isvalueP99
+    alert(str.format( "{0} 30S Big Volume {1}({2}) : {3} {4} {5}", syminfo.ticker, strVolume(_value), strPercent(_value/volume_max), alertinfoprice(), alertinfodaychange(), alertinfodirection ), alert.freq_once_per_bar_close)
+else if vcum1m >= vp100m1 and not isanyval[1]
+    alert(str.format( "{0} 1m Huge Volume {1}({2}) : {3} {4} {5}", syminfo.ticker, strVolume(_value), strPercent(vcum1m/volume_max), alertinfoprice(), alertinfodaychange(), alertinfodirection ), alert.freq_once_per_bar_close)
+else if isvcum1m and not isanyval[1]
+    alert(str.format( "{0} 1m Big Volume {1}({2}) : {3} {4} {5}", syminfo.ticker, strVolume(_value), strPercent(vcum1m/volume_max), alertinfoprice(), alertinfodaychange(), alertinfodirection ), alert.freq_once_per_bar_close)
+
+else if (iscrossedup or iscrosseddn) and islevelchanged(price_level_crossed, level_crossed.curr.price) and not islqdt
+    alert(str.format( "{0} 30S Cross Level {1}->{2} {3} {4}", syminfo.ticker, strPrice(level_crossed.curr.price), strPrice(price_level_crossed), alertinfodaychange(), strUpDn(price_level_crossed-level_crossed.curr.price) ), alert.freq_once_per_bar_close)
+
+else if (isunderup or isabovedn) and (levelnearstatscount >= 3 and levelnearstatscount % 3 == 0 and triggerscountnear < 3)
+    alert(str.format( "{0} 30S Near Level {1} {2} {3}", syminfo.ticker, alertinfoprice(), alertinfodaychange(), strUpDn(nearestnearprice()-prevnearestnearlevel()) ), alert.freq_once_per_bar_close)
     triggerscountnear := triggerscountnear + 1
-    trig("near")
 
 
 
@@ -594,7 +582,6 @@ if dispLabels
 
 
 // EOB - End of Bar
-tickprice := close
 
 endofbar_update_levelinfo_price(level_crossed, price_level_crossed)
 endofbar_update_levelinfo_price(level_touched, price_level_touched)
