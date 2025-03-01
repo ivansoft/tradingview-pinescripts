@@ -406,6 +406,16 @@ istrig(v) => triggrered.contains(v)
 notrig(v) => not triggrered.contains(v)
 trig(v) => triggrered.put(v,true)
 
+varip float tickprice = na
+
+dayopen = open[ta.barssince(ta.change(dayofmonth) != 0)]
+deltaopen = (close - dayopen) / dayopen
+oc2 = (open + close) / 2
+vwap = ta.vwap(oc2, ta.change(dayofmonth) != 0)
+deltavwap = (close - vwap) / vwap
+// plot(vwap, force_overlay = true)
+// plot(dayopen, force_overlay = true)
+
 
 /// --- nearest in history - any
 nearestlevel() => switch math.max(level_crossed.curr.indexstart, level_touched.curr.indexstart, level_near.curr.indexstart)
@@ -450,23 +460,14 @@ prevnearestnearlevelbigval() => switch
             level_near.bigval.get(1).indexstart => level_near.bigval.get(1).price
             => prevnearestnearlevel()
 
-nearestprice() => nz(price_level_crossed, nz(price_level_near, price_level_touched))
-nearestnearprice() => nz(price_level_near, price_level_touched)
-
+/// --- nearest in history - 'by type'
 prevbigvalcrossed() => nz(level_crossed.bigval.size() < 2 ? na : level_crossed.bigval.get(1).price, nz(level_crossed.val.get(0).price, level_crossed.curr.price))
 prevbigvaltouched() => nz(level_touched.bigval.size() < 2 ? na : level_touched.bigval.get(1).price, nz(level_touched.val.get(0).price, level_touched.curr.price))
 prevbigvalnear()    => nz(level_near.bigval.size() < 2 ? na : level_near.bigval.get(1).price,    nz(level_near.val.get(0).price,    level_near.curr.price))
 
-
-varip float tickprice = na
-
-dayopen = open[ta.barssince(ta.change(dayofmonth) != 0)]
-deltaopen = (close - dayopen) / dayopen
-oc2 = (open + close) / 2
-vwap = ta.vwap(oc2, ta.change(dayofmonth) != 0)
-deltavwap = (close - vwap) / vwap
-// plot(vwap, force_overlay = true)
-// plot(dayopen, force_overlay = true)
+/// --- current signal price
+nearestprice() => nz(price_level_crossed, nz(price_level_near, price_level_touched))
+nearestnearprice() => nz(price_level_near, price_level_touched)
 
 
 iscrossedup = state_up == StateLevel.crossed or state_up == StateLevel.crossed_multiple
