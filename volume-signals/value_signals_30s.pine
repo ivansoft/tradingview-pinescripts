@@ -544,8 +544,12 @@ iscrossedup = state_up == StateLevel.crossed or state_up == StateLevel.crossed_m
 iscrosseddn = state_dn == StateLevel.crossed or state_dn == StateLevel.crossed_multiple
 isunderup = state_up == StateLevel.near
 isabovedn = state_dn == StateLevel.near
-ishitup = state_up == StateLevel.reached or state_up == StateLevel.touched
-ishitdn = state_dn == StateLevel.reached or state_dn == StateLevel.touched
+istouchedup = state_up == StateLevel.touched
+istoucheddn = state_dn == StateLevel.touched
+ishitup = state_up == StateLevel.reached
+ishitdn = state_dn == StateLevel.reached
+isreachedup = ishitup or istouchedup
+isreacheddn = ishitdn or istoucheddn
 
 alertleveldescription() => switch
     iscrossedup or iscrosseddn => "Cross"
@@ -560,8 +564,10 @@ alertinfoprice() => switch
         switch
             iscrossedup => str.format("▲ {0}->{1}", strPrice(prevbigvalcrossed()), strPrice(price_level_crossed))
             iscrosseddn => str.format("▼ {0}->{1}", strPrice(prevbigvalcrossed()), strPrice(price_level_crossed))
-            ishitup => str.format("┴ {0}", strPrice(price_level_touched))
-            ishitdn => str.format("┬ {0}", strPrice(price_level_touched))
+            istouchedup => str.format("┴ {0}", strPrice(price_level_touched))
+            istoucheddn => str.format("┬ {0}", strPrice(price_level_touched))
+            ishitup => str.format("̿  {0}", strPrice(price_level_touched))
+            ishitdn => str.format("͇  {0}", strPrice(price_level_touched))
             isunderup => str.format("͡  {0}", strPrice(price_level_near))
             isabovedn => str.format("͜  {0}", strPrice(price_level_near))
             => str.format("{0}", strPrice(nearestlevel()))
@@ -593,7 +599,7 @@ else if (iscrossedup or iscrosseddn) and islevelchanged(price_level_crossed, lev
     alert(str.format( "{0} 30S {1} Level {2} {3}->{4} {5} {6}", syminfo.ticker, alertleveldescription(), iscrossedup?"^":"v", strPrice(level_crossed.curr.price), strPrice(price_level_crossed), alertinfodaychange(), strUpDn(price_level_crossed-level_crossed.curr.price) ), alert.freq_once_per_bar_close)
     debuglables()
 
-else if (ishitup or ishitdn) and islevelchanged(price_level_touched, level_touched.curr.price) and not islqdt
+else if (isreachedup or isreacheddn) and islevelchanged(price_level_touched, level_touched.curr.price) and not islqdt
     alert(str.format( "{0} 30S {1} Level {2} {3} {4}", syminfo.ticker, alertleveldescription(), alertinfoprice(), alertinfodaychange(), strUpDn(nearestnearprice()-prevnearestnearlevel()) ), alert.freq_once_per_bar_close)
     debuglables()
 
