@@ -548,6 +548,7 @@ if islqdt
 
 notrigval = notrig("big") and notrig("huge")
 
+
 if isvalueP100 and notrig("huge")
     alert(str.format( "{0} 30S Huge Volume {1}({2}) : {3} {4} {5}", syminfo.ticker, strVolume(_value), strPercent(_value/volume_max), priceinfobigval, pricechangeinfo, istrig("big")?"SAME":"" ), alert.freq_all)
     trig("huge")
@@ -560,6 +561,7 @@ if isvcum1m and notrig("1mbig") and notrigval and not isanyval[1]
 if vcum1m >= vp100m1 and notrig("1mhuge") and notrigval and not isanyval[1]
     alert(str.format( "{0} 1m Huge Volume {1}({2}) : {3} {4}", syminfo.ticker, strVolume(_value), strPercent(vcum1m/volume_max), priceinfobigval, pricechangeinfo, istrig("big") or istrig("huge") or istrig("1mbig")?"SAME":"" ), alert.freq_all)
     trig("1mhuge")
+
 
 if (iscrossedup or iscrosseddn) and islevelchanged(price_level_crossed, level_crossed.curr.price) and notrig("level") and notrigval and not islqdt
     alert(str.format( "{0} 30S Cross Level {1}->{2} D {3} VWAP {4} {5}", syminfo.ticker, strPrice(level_crossed.curr.price), strPrice(price_level_crossed), strPercent(deltaopen), strPercent(deltavwap), strUpDn(price_level_crossed-level_crossed.curr.price) ), alert.freq_all)
