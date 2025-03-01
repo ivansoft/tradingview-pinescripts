@@ -464,9 +464,15 @@ nearestnearprice() => nz(price_level_near, price_level_touched)
 
 iscrossedup = state_up == StateLevel.crossed or state_up == StateLevel.crossed_multiple
 iscrosseddn = state_dn == StateLevel.crossed or state_dn == StateLevel.crossed_multiple
+isunderup = state_up == StateLevel.near
+isabovedn = state_dn == StateLevel.near
+ishitup = state_up == StateLevel.reached or state_up == StateLevel.touched
+ishitdn = state_dn == StateLevel.reached or state_dn == StateLevel.touched
 
-isunderup = state_up == StateLevel.near or state_up == StateLevel.reached or state_up == StateLevel.touched
-isabovedn = state_dn == StateLevel.near or state_dn == StateLevel.reached or state_dn == StateLevel.touched
+alertlevelcond() => switch
+    iscrossedup or iscrosseddn => "Cross"
+    isunderup or isabovedn => "Near"
+    ishitup or ishitdn => "Hit"
 
 alertinfoprice() => switch
     islqdt => str.format("{0}->{1}", strPrice(dayopen), strPrice(close))
@@ -474,8 +480,10 @@ alertinfoprice() => switch
         switch
             iscrossedup => str.format("^ {0}->{1}", strPrice(prevbigvalcrossed()), strPrice(price_level_crossed))
             iscrosseddn => str.format("v {0}->{1}", strPrice(prevbigvalcrossed()), strPrice(price_level_crossed))
-            isunderup => str.format("^^ {0}", strPrice(nearestnearprice()))
-            isabovedn => str.format("vv {0}", strPrice(nearestnearprice()))
+            ishitup => str.format("^^ {0}", strPrice(price_level_touched))
+            ishitdn => str.format("vv {0}", strPrice(price_level_touched))
+            isunderup => str.format("~^~ {0}", strPrice(price_level_near))
+            isabovedn => str.format("~v~ {0}", strPrice(price_level_near))
 
 alertinfodaychange() => switch
     islqdt => ""
@@ -487,11 +495,6 @@ alertinfodirection = switch
     => str.format("{0}", strUpDn(oc2-oc2[1]))
 
 
-levelnearstatscount = math.max(level_near.curr.stats.count, level_touched.curr.stats.count)
-var triggerscountnear = 0
-if islevelchanged(price_level_near, level_near.curr.price) or islevelchanged(price_level_touched, level_touched.curr.price)
-    triggerscountnear := 0
-
 if isvalueP100
     alert(str.format( "{0} 30S Huge Volume {1}({2}) : {3} {4} {5}", syminfo.ticker, strVolume(_value), strPercent(_value/volume_max), alertinfoprice(), alertinfodaychange(), alertinfodirection ), alert.freq_once_per_bar_close)
 else if isvalueP99
@@ -502,12 +505,13 @@ else if isvcum1m and not isanyval[1]
     alert(str.format( "{0} 1m Big Volume {1}({2}) : {3} {4} {5}", syminfo.ticker, strVolume(_value), strPercent(vcum1m/volume_max), alertinfoprice(), alertinfodaychange(), alertinfodirection ), alert.freq_once_per_bar_close)
 
 else if (iscrossedup or iscrosseddn) and islevelchanged(price_level_crossed, level_crossed.curr.price) and not islqdt
-    alert(str.format( "{0} 30S Cross Level {1}->{2} {3} {4}", syminfo.ticker, strPrice(level_crossed.curr.price), strPrice(price_level_crossed), alertinfodaychange(), strUpDn(price_level_crossed-level_crossed.curr.price) ), alert.freq_once_per_bar_close)
+    alert(str.format( "{0} 30S {1} Level {2} {3}->{4} {5} {6}", syminfo.ticker, alertlevelcond(), iscrossedup?"^":"v", strPrice(level_crossed.curr.price), strPrice(price_level_crossed), alertinfodaychange(), strUpDn(price_level_crossed-level_crossed.curr.price) ), alert.freq_once_per_bar_close)
 
-else if (isunderup or isabovedn) and (levelnearstatscount >= 3 and levelnearstatscount % 3 == 0 and triggerscountnear < 3)
-    alert(str.format( "{0} 30S Near Level {1} {2} {3}", syminfo.ticker, alertinfoprice(), alertinfodaychange(), strUpDn(nearestnearprice()-prevnearestnearlevel()) ), alert.freq_once_per_bar_close)
-    triggerscountnear := triggerscountnear + 1
+else if (isunderup or isabovedn) and islevelchanged(price_level_near, level_near.curr.price) and not islqdt
+    alert(str.format( "{0} 30S {1} Level {2} {3} {4}", syminfo.ticker, alertlevelcond(), alertinfoprice(), alertinfodaychange(), strUpDn(nearestnearprice()-prevnearestnearlevel()) ), alert.freq_once_per_bar_close)
 
+else if (ishitup or ishitdn) and islevelchanged(price_level_touched, level_touched.curr.price) and not islqdt
+    alert(str.format( "{0} 30S {1} Level {2} {3} {4}", syminfo.ticker, alertlevelcond(), alertinfoprice(), alertinfodaychange(), strUpDn(nearestnearprice()-prevnearestnearlevel()) ), alert.freq_once_per_bar_close)
 
 
 // DEBUG
